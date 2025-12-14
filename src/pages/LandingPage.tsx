@@ -31,7 +31,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
              <img src="/kadoshAI-removebg.png" alt="KadoshAI Logo" className="h-10 w-auto" />
-            <span className="font-bold text-lg tracking-tight">SocialNexus</span>
+            <span className="font-bold text-lg tracking-tight">Social Deal Maker</span>
           </Link>
 
           {/* Desktop Links */}
