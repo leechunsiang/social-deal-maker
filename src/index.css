@@ -113,15 +113,25 @@
   --sidebar-ring: oklch(0.556 0 0);
 
   --animate-marquee: marquee 25s linear infinite;
-  
+
   @keyframes marquee {
-    from { transform: translateX(0); }
-    to { transform: translateX(calc(-100% - 4rem)); }
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(calc(-100% - 4rem));
+    }
   }
 }
 
 .mask-linear-fade {
-  mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 10%,
+    black 90%,
+    transparent
+  );
 }
 
 @layer base {
@@ -131,4 +141,24 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Custom Minimalist Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }

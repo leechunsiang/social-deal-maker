@@ -210,7 +210,9 @@ export default function LandingPage() {
                               Messages
                             </h2>
                           </div>
-                          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                      
+                      {/* User List Container with max-height for scrolling */}
+                          <div className="flex-1 overflow-y-auto p-2 space-y-1 max-h-[600px]">
                              {loadingProfiles ? (
                                <div className="flex items-center justify-center py-10">
                                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-violet-500"></div>
@@ -290,7 +292,7 @@ export default function LandingPage() {
                               </div>
 
                               {/* Chat Messages */}
-                              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                              <div className="flex-1 overflow-y-auto p-6 space-y-6 max-h-[600px]">
                                 {loadingChat ? (
                                   <div className="flex flex-col items-center justify-center h-full gap-2">
                                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-500"></div>
