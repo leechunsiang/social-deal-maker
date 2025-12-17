@@ -7,7 +7,8 @@ import {
   X,
   User,
   MessageCircle,
-  Bot
+  Bot,
+  Send
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Footer } from '../components/Footer';
@@ -46,6 +47,8 @@ export default function LandingPage() {
   const [selectedProfile, setSelectedProfile] = useState<InstagramProfile | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [loadingChat, setLoadingChat] = useState(false);
+  const [inputMessage, setInputMessage] = useState('');
+  const [sending, setSending] = useState(false);
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
   // Set the "Social" tab fetching side-effect
@@ -93,12 +96,11 @@ export default function LandingPage() {
   const fetchChatHistory = async (userId: string) => {
     setLoadingChat(true);
     try {
-      // Assuming 'n8n_chat_histories' matches the schema: session_id, message (jsonb), created_at
       const { data, error } = await supabase
         .from('n8n_chat_histories')
         .select('*')
         .eq('session_id', userId)
-        .order('created_at', { ascending: true }); // Oldest first for chat flow
+        .order('created_at', { ascending: true });
 
       if (error) {
         console.error('Error fetching chat history:', error);
@@ -109,6 +111,58 @@ export default function LandingPage() {
       console.error('Unexpected error:', err);
     } finally {
       setLoadingChat(false);
+    }
+  };
+
+  const handleSendMessage = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!inputMessage.trim() || !selectedProfile || sending) return;
+
+    const messageText = inputMessage.trim();
+    setInputMessage('');
+    setSending(true);
+
+    // Optimistic Update
+    const optimisticMessage: ChatMessage = {
+      id: Date.now(), // Temporary ID
+      session_id: selectedProfile.user_id,
+      message: {
+        type: 'ai',
+        content: messageText
+      },
+      created_at: new Date().toISOString()
+    };
+
+    setChatMessages(prev => [...prev, optimisticMessage]);
+
+    try {
+      const response = await fetch('https://n8n.kadoshai.com/webhook/send-dm', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          recipientId: selectedProfile.user_id,
+          text: messageText
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to send message');
+      }
+
+      // Success - no persistent action needed here as n8n handles the DB insert.
+      // We rely on the optimistic update for immediate feedback.
+      // In a real app, you might re-fetch or use a realtime subscription to confirm.
+      
+    } catch (error) {
+      console.error('Error sending message:', error);
+      // Revert optimistic update (optional, but good practice)
+      setChatMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id));
+      alert('Failed to send message. Please try again.');
+      setInputMessage(messageText); // Restore input
+    } finally {
+      setSending(false);
     }
   };
 
@@ -210,8 +264,8 @@ export default function LandingPage() {
                               Messages
                             </h2>
                           </div>
-                      
-                      {/* User List Container with max-height for scrolling */}
+                          
+                          {/* User List Container with max-height for scrolling */}
                           <div className="flex-1 overflow-y-auto p-2 space-y-1 max-h-[600px]">
                              {loadingProfiles ? (
                                <div className="flex items-center justify-center py-10">
@@ -345,23 +399,30 @@ export default function LandingPage() {
                                 <div ref={chatBottomRef} />
                               </div>
 
-                              {/* Input Placeholder (Static) */}
-                              <div className="p-4 border-t border-white/5 bg-zinc-900/50 backdrop-blur-sm">
+                              {/* Input Area */}
+                              <form onSubmit={handleSendMessage} className="p-4 border-t border-white/5 bg-zinc-900/50 backdrop-blur-sm">
                                 <div className="flex gap-2">
                                   <input 
                                     type="text" 
+                                    value={inputMessage}
+                                    onChange={(e) => setInputMessage(e.target.value)}
                                     placeholder="Type a message..." 
                                     className="flex-1 bg-zinc-950/50 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20 transition-all placeholder:text-zinc-600"
-                                    disabled
+                                    disabled={sending || !selectedProfile}
                                   />
-                                  <button disabled className="bg-white/5 text-zinc-500 p-3 rounded-xl cursor-not-allowed">
-                                    <Share2 className="size-5" />
+                                  <button 
+                                    type="submit"
+                                    disabled={!inputMessage.trim() || sending || !selectedProfile}
+                                    className="bg-violet-600 hover:bg-violet-500 disabled:bg-white/5 disabled:text-zinc-500 disabled:hover:bg-white/5 text-white p-3 rounded-xl transition-colors"
+                                  >
+                                    {sending ? (
+                                        <div className="size-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    ) : (
+                                        <Send className="size-5" />
+                                    )}
                                   </button>
                                 </div>
-                                <p className="text-center text-[10px] text-zinc-600 mt-2">
-                                  Chat input is currently disabled.
-                                </p>
-                              </div>
+                              </form>
                             </>
                           ) : (
                             <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 p-8 text-center">
