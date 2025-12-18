@@ -31,8 +31,9 @@ interface ChatMessage {
   id: number;
   session_id: string;
   message: {
-    type: 'human' | 'ai';
-    content: string;
+    type?: 'human' | 'ai' | 'me';
+    content?: string;
+    message?: string;
   };
   created_at: string;
 }
@@ -62,6 +63,33 @@ export default function LandingPage() {
   useEffect(() => {
     if (selectedProfile) {
       fetchChatHistory(selectedProfile.user_id);
+      
+      const channel = supabase
+        .channel('chat-updates')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'n8n_chat_histories',
+            filter: `session_id=eq.${selectedProfile.user_id}`
+          },
+          (payload) => {
+            const newMsg = payload.new as ChatMessage;
+            setChatMessages((prev) => {
+               // Simple deduplication check based on ID if possible, or assume new
+               const exists = prev.some(msg => msg.id === newMsg.id);
+               if (exists) return prev;
+               return [...prev, newMsg];
+            });
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+
     } else {
       setChatMessages([]);
     }
@@ -127,7 +155,7 @@ export default function LandingPage() {
       id: Date.now(), // Temporary ID
       session_id: selectedProfile.user_id,
       message: {
-        type: 'ai',
+        type: 'me',
         content: messageText
       },
       created_at: new Date().toISOString()
@@ -136,28 +164,52 @@ export default function LandingPage() {
     setChatMessages(prev => [...prev, optimisticMessage]);
 
     try {
-      const response = await fetch('https://n8n.kadoshai.com/webhook/send-dm', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          recipientId: selectedProfile.user_id,
-          text: messageText
-        }),
-      });
+      const { data: insertedMsg, error } = await supabase
+        .from('n8n_chat_histories')
+        .insert({
+          session_id: selectedProfile.user_id,
+          message: {
+            type: 'me',
+            content: messageText
+          }
+        })
+        .select()
+        .single();
 
-      if (!response.ok) {
-        throw new Error('Failed to send message');
+      if (error) {
+        throw error;
       }
 
-      // Success - no persistent action needed here as n8n handles the DB insert.
-      // We rely on the optimistic update for immediate feedback.
-      // In a real app, you might re-fetch or use a realtime subscription to confirm.
+      // Update the optimistic message with the real ID from Supabase
+      // This prevents the Realtime subscription from adding it again as a "new" message
+      if (insertedMsg) {
+         setChatMessages(prev => prev.map(msg => 
+            msg.id === optimisticMessage.id ? insertedMsg : msg
+         ));
+      }
+
+      // --- Instagram Secure Send (Edge Function) ---
+      
+      const { data, error: functionError } = await supabase.functions.invoke('send-instagram-message', {
+        body: {
+          recipient_id: selectedProfile.user_id,
+          message_text: messageText,
+        },
+      });
+
+      if (functionError) {
+        console.error('Edge Function Error:', functionError);
+        // alert('Failed to trigger send function');
+      } else if (data?.error) {
+         console.error('Instagram API Error via Edge Function:', data.error);
+      } else {
+        console.log('Message sent successfully via Edge Function');
+      }
+      // ---------------------------------------------
       
     } catch (error) {
       console.error('Error sending message:', error);
-      // Revert optimistic update (optional, but good practice)
+      // Revert optimistic update
       setChatMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id));
       alert('Failed to send message. Please try again.');
       setInputMessage(messageText); // Restore input
@@ -353,43 +405,50 @@ export default function LandingPage() {
                                      <p className="text-xs text-zinc-500">Loading conversation...</p>
                                   </div>
                                 ) : chatMessages.length > 0 ? (
-                                  chatMessages.map((msg) => (
-                                    <div 
-                                      key={msg.id} 
-                                      className={cn(
-                                        "flex gap-3 max-w-3xl",
-                                        msg.message.type === 'ai' ? "ml-auto flex-row-reverse" : ""
-                                      )}
-                                    >
-                                      {/* Avatar */}
-                                      <div className={cn(
-                                        "flex-shrink-0 size-8 rounded-full flex items-center justify-center border",
-                                        msg.message.type === 'ai' 
-                                          ? "bg-violet-600/20 border-violet-500/30 text-violet-400" 
-                                          : "bg-zinc-800 border-white/10 text-zinc-400"
-                                      )}>
-                                        {msg.message.type === 'ai' ? <Bot className="size-4" /> : <User className="size-4" />}
-                                      </div>
+                                  chatMessages.map((msg) => {
+                                    /* Handle both explicit schema and user simplified schema */
+                                    const content = msg.message.content || msg.message.message || '';
+                                    /* Default to 'human' for incoming messages lacking type (simple schema) */
+                                    const type = msg.message.type || 'human';
 
-                                      {/* Message Bubble */}
-                                      <div className={cn(
-                                        "flex flex-col gap-1 min-w-[120px]",
-                                        msg.message.type === 'ai' ? "items-end" : "items-start"
-                                      )}>
-                                         <div className={cn(
-                                           "px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap shadow-sm",
-                                           msg.message.type === 'ai' 
-                                             ? "bg-violet-600 text-white rounded-tr-sm" 
-                                             : "bg-zinc-800 text-zinc-200 rounded-tl-sm border border-white/5"
-                                         )}>
-                                           {msg.message.content}
-                                         </div>
-                                         <span className="text-[10px] text-zinc-600 px-1">
-                                           {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                         </span>
+                                    return (
+                                      <div 
+                                        key={msg.id} 
+                                        className={cn(
+                                          "flex gap-3 max-w-3xl",
+                                          type === 'ai' || type === 'me' ? "ml-auto flex-row-reverse" : ""
+                                        )}
+                                      >
+                                        {/* Avatar */}
+                                        <div className={cn(
+                                          "flex-shrink-0 size-8 rounded-full flex items-center justify-center border",
+                                          type === 'ai' || type === 'me'
+                                            ? "bg-violet-600/20 border-violet-500/30 text-violet-400" 
+                                            : "bg-zinc-800 border-white/10 text-zinc-400"
+                                        )}>
+                                          {(type === 'ai' || type === 'me') ? <Bot className="size-4" /> : <User className="size-4" />}
+                                        </div>
+
+                                        {/* Message Bubble */}
+                                        <div className={cn(
+                                          "flex flex-col gap-1 min-w-[120px]",
+                                          type === 'ai' || type === 'me' ? "items-end" : "items-start"
+                                        )}>
+                                           <div className={cn(
+                                             "px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap shadow-sm",
+                                             type === 'ai' || type === 'me'
+                                               ? "bg-violet-600 text-white rounded-tr-sm"
+                                               : "bg-zinc-800 text-zinc-200 rounded-tl-sm border border-white/5"
+                                           )}>
+                                             {content}
+                                           </div>
+                                           <span className="text-[10px] text-zinc-600 px-1">
+                                             {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                           </span>
+                                        </div>
                                       </div>
-                                    </div>
-                                  ))
+                                    );
+                                  })
                                 ) : (
                                   <div className="h-full flex flex-col items-center justify-center text-zinc-500 gap-2 opacity-50">
                                      <MessageCircle className="size-12" />
