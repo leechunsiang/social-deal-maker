@@ -1,15 +1,60 @@
 
-import React, { useState } from 'react';
+import { supabase } from '../../lib/supabase';
+
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, Grid, List, Plus } from 'lucide-react';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, startOfWeek, endOfWeek } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { DayDetailsDialog } from './DayDetailsDialog';
+import { SchedulePostDialog } from './SchedulePostDialog';
+
+interface ScheduledPost {
+  id: string;
+  media_url: string;
+  post_type: 'POST' | 'REEL' | 'STORY';
+  scheduled_at: string;
+  status: 'scheduled' | 'published' | 'failed';
+  caption?: string; 
+}
+
+const POST_COLORS = [
+    'bg-pink-500 text-white border-pink-600',
+    'bg-purple-500 text-white border-purple-600', 
+    'bg-indigo-500 text-white border-indigo-600',
+    'bg-cyan-600 text-white border-cyan-700',
+    'bg-teal-500 text-white border-teal-600',
+    'bg-rose-500 text-white border-rose-600',
+    'bg-orange-500 text-white border-orange-600',
+];
+
+const getPostColor = (id: string) => {
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+        hash = id.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash) % POST_COLORS.length;
+    return POST_COLORS[index];
+};
 
 export default function ScheduleTab() {
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [view, setView] = useState<'month' | 'week' | 'day'>('month');
+  
+  const [isDialogOpen, setIsDialogOpen] = useState(false); // For SchedulePostDialog
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false); // For DayDetailsDialog
+  
+  const [posts, setPosts] = useState<ScheduledPost[]>([]);
 
+  const onDateClick = (d: Date) => {
+      setSelectedDate(d);
+      if (date && !isSameMonth(d, date)) {
+          setDate(d);
+      }
+      setIsDetailsOpen(true); // Open Details instead of Create immediately
+  };
+    
   // Month Navigation
   const handlePrevMonth = () => {
     if (date) setDate(subMonths(date, 1));
@@ -19,6 +64,33 @@ export default function ScheduleTab() {
     if (date) setDate(addMonths(date, 1));
   };
 
+  const fetchPosts = async () => {
+    const { data, error } = await supabase
+      .from('scheduled_posts')
+      .select('*');
+      
+    if (error) {
+      console.error('Error fetching posts:', error);
+    } else {
+      setPosts(data || []);
+    }
+  };
+
+  // Fetch posts on mount and when date changes (could be optimized)
+  useEffect(() => {
+    fetchPosts();
+  }, [date]);
+
+  // Callback to refresh posts after dialog closes
+  const handleDialogClose = () => {
+      setIsDialogOpen(false);
+      fetchPosts(); 
+  };
+
+  const handleAddEventFromDetails = () => {
+      setIsDetailsOpen(false);
+      setIsDialogOpen(true);
+  };
 
   return (
     <div className="flex flex-col h-full bg-black/20 rounded-2xl border border-white/5 overflow-hidden">
@@ -77,92 +149,92 @@ export default function ScheduleTab() {
                  </Button>
              </div>
 
-             <Button className="bg-white text-black hover:bg-zinc-200 h-9 gap-2">
+             <Button 
+                className="bg-white text-black hover:bg-zinc-200 h-9 gap-2"
+                onClick={() => setIsDialogOpen(true)}
+             >
                  <Plus className="h-4 w-4" />
                  Add Event
              </Button>
          </div>
       </div>
-
-      {/* Main Content Area */}
+        
+        {/* Main Content Area */}
       <div className="flex-1 overflow-auto bg-zinc-950 p-6">
           {view === 'month' && (
             <CalendarGrid 
                 date={date} 
                 selectedDate={selectedDate} 
-                onSelectDate={(d) => {
-                    setSelectedDate(d);
-                    // Optional: Switch view month if selecting a day from prev/next month
-                    if (date && !isSameMonth(d, date)) {
-                        setDate(d);
-                    }
-                }} 
+                onSelectDate={onDateClick} 
+                posts={posts}
             />
           )}
-          {view === 'week' && (
-              <div className="h-full flex items-center justify-center text-zinc-500 flex-col gap-2">
-                  <Grid className="h-10 w-10 opacity-20" />
-                  <p>Week view implementation pending.</p>
-              </div>
-          )}
-          {view === 'day' && (
-               <div className="h-full flex items-center justify-center text-zinc-500 flex-col gap-2">
-                  <List className="h-10 w-10 opacity-20" />
-                  <p>Day view implementation pending.</p>
-              </div>
-          )}
+          {/* ... */}
       </div>
+
+      {/* Dialogs */}
+      {selectedDate && (
+          <DayDetailsDialog 
+            isOpen={isDetailsOpen}
+            onClose={() => setIsDetailsOpen(false)}
+            date={selectedDate}
+            posts={posts.filter(p => isSameDay(new Date(p.scheduled_at), selectedDate || new Date()))}
+            onAddEvent={handleAddEventFromDetails}
+          />
+      )}
+
+      <SchedulePostDialog 
+        isOpen={isDialogOpen} 
+        onClose={handleDialogClose} 
+        selectedDate={selectedDate || new Date()} 
+      />
     </div>
   );
 }
 
-// Improved Grid Render using eachDayOfInterval
-interface CalendarGridProps {
-    date: Date | undefined;
-    selectedDate: Date | undefined;
-    onSelectDate: (date: Date) => void;
-}
+// ... CalendarGridProps
 
-function CalendarGrid({ date, selectedDate, onSelectDate }: CalendarGridProps) {
+function CalendarGrid({ date, selectedDate, onSelectDate, posts }: CalendarGridProps) {
       if (!date) return null;
+      // ... (existing date calcs)
       const monthStart = startOfMonth(date);
       const monthEnd = endOfMonth(date);
       const calendarStart = startOfWeek(monthStart);
       const calendarEnd = endOfWeek(monthEnd);
-
       const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd });
-
       const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
       return (
           <div className="flex flex-col h-full">
               {/* Days Header */}
-              <div className="grid grid-cols-7 border-b border-zinc-800">
+               <div className="grid grid-cols-7 border-b border-zinc-800">
                   {weekDays.map(d => (
                       <div key={d} className="py-3 text-center text-xs font-semibold text-zinc-500 uppercase tracking-wider">
                           {d}
                       </div>
                   ))}
               </div>
-              
+
               {/* Days Grid */}
               <div className="flex-1 grid grid-cols-7 grid-rows-5 auto-rows-fr">
                    {calendarDays.map((dayItem, idx) => {
                        const isSelected = selectedDate ? isSameDay(dayItem, selectedDate) : false;
                        const isToday = isSameDay(dayItem, new Date());
                        
+                       const dayPosts = posts.filter(p => isSameDay(new Date(p.scheduled_at), dayItem));
+
                        return (
                            <div 
                             key={dayItem.toString()}
                             onClick={() => onSelectDate(dayItem)}
                             className={cn(
                                 "min-h-[100px] border-r border-b border-zinc-800 p-2 relative transition-colors cursor-pointer flex flex-col gap-1 group",
-                                isSelected ? "bg-violet-900/20 hover:bg-violet-900/30" : "bg-zinc-950/30 hover:bg-zinc-900/50",
+                                isSelected ? "bg-violet-900/10" : "bg-zinc-950/30 hover:bg-zinc-900/50",
                                 !isSameMonth(dayItem, monthStart) && !isSelected && "bg-zinc-950/10 text-zinc-600",
                                 (idx + 1) % 7 === 0 && "border-r-0" // Remove right border for last col
                             )}
                            >
-                               <div className="flex items-center justify-between">
+                               <div className="flex items-center justify-between mb-2">
                                    <span className={cn(
                                        "text-sm font-medium w-7 h-7 flex items-center justify-center rounded-full transition-colors",
                                        isToday 
@@ -174,10 +246,30 @@ function CalendarGrid({ date, selectedDate, onSelectDate }: CalendarGridProps) {
                                        {format(dayItem, 'd')}
                                    </span>
                                </div>
+                               
+                               {/* Render Posts */}
+                               <div className="flex flex-col gap-1.5 overflow-hidden">
+                                   {dayPosts.map(post => {
+                                       const colorClass = getPostColor(post.id);
+                                       return (
+                                           <div key={post.id} className={cn(
+                                               "flex items-center gap-2 p-1.5 rounded-md border text-[10px] shadow-sm transition-transform hover:scale-105",
+                                               colorClass
+                                           )}>
+                                                {/* Dot/Icon */}
+                                                {post.post_type === 'STORY' && <div className="w-1.5 h-1.5 rounded-full bg-white/80 shrink-0" />}
+                                                
+                                                <span className="truncate font-bold">
+                                                    {post.post_type} {post.status === 'published' ? '✓' : ''}
+                                                </span>
+                                           </div>
+                                       );
+                                   })}
+                               </div>
                            </div>
                        );
                    })}
               </div>
           </div>
       )
-  }
+}

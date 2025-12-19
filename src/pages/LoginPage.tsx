@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Eye, EyeOff, ArrowRight, ArrowLeft } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 const loginSchema = z.object({
   identifier: z.string().min(1, 'Email or Username is required'),
@@ -15,14 +16,32 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
+  const navigate = useNavigate();
+  const [isLoading, setIsLoading] = useState(false);
   
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
   });
 
-  const onSubmit = (data: LoginFormValues) => {
-    console.log(data);
-    // Handle login logic here
+  const onSubmit = async (data: LoginFormValues) => {
+    setIsLoading(true);
+    try {
+        const { error } = await supabase.auth.signInWithPassword({
+            email: data.identifier,
+            password: data.password,
+        });
+
+        if (error) {
+            alert(error.message);
+        } else {
+            navigate('/');
+        }
+    } catch (error) {
+        console.error('Login error:', error);
+        alert('An unexpected error occurred');
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   return (
@@ -77,15 +96,14 @@ export default function LoginPage() {
 
           <button 
             type="submit"
-            className="w-full py-3.5 rounded-xl bg-linear-to-r from-violet-600 to-cyan-500 text-white font-bold shadow-lg shadow-violet-500/20 hover:shadow-violet-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            disabled={isLoading}
+            className="w-full py-3.5 rounded-xl bg-linear-to-r from-violet-600 to-cyan-500 text-white font-bold shadow-lg shadow-violet-500/20 hover:shadow-violet-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Log In <ArrowRight size={18} />
+            {isLoading ? 'Logging in...' : <><span className="mr-1">Log In</span> <ArrowRight size={18} /></>}
           </button>
         </form>
 
-        <p className="text-center text-zinc-500 text-sm mt-6">
-          Don't have an account? <Link to="/signup" className="text-white hover:underline">Sign up</Link>
-        </p>
+
       </motion.div>
     </div>
   );

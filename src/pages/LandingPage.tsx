@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard,
   Share2, 
@@ -7,6 +7,8 @@ import {
   Video, 
   Menu,
   X,
+  LogOut,
+  User as UserIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Footer } from '../components/Footer';
@@ -15,12 +17,34 @@ import { DashboardTab } from '../components/dashboard/DashboardTab';
 import { SocialTab } from '../components/dashboard/SocialTab';
 import ScheduleTab from '../components/dashboard/ScheduleTab';
 import { VideoTab } from '../components/dashboard/VideoTab';
+import { supabase } from '../lib/supabase';
+import type { User } from '@supabase/supabase-js';
 
 type Tab = 'dashboard' | 'social' | 'schedule' | 'video';
 
 export default function LandingPage() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    // Check active session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+
+    // Listen for changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+      await supabase.auth.signOut();
+      // User state will update automatically via listener
+  };
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -56,6 +80,34 @@ export default function LandingPage() {
                 </button>
             ))}
         </nav>
+        <div className="p-4 border-t border-white/5">
+             {user ? (
+                 <div className="flex flex-col gap-3">
+                     <div className="flex items-center gap-2 px-2">
+                         <div className="size-8 rounded-full bg-violet-600/20 flex items-center justify-center text-violet-400">
+                             <UserIcon size={16} />
+                         </div>
+                         <div className="flex-1 min-w-0">
+                             <p className="text-sm font-medium truncate">{user.email}</p>
+                             <p className="text-xs text-zinc-500">Free Plan</p>
+                         </div>
+                     </div>
+                     <button
+                         onClick={handleLogout}
+                         className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm font-medium transition-colors"
+                     >
+                         <LogOut size={16} /> Log Out
+                     </button>
+                 </div>
+             ) : (
+                 <button
+                     onClick={() => window.location.href = '/login'}
+                     className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium transition-colors"
+                 >
+                     Log In
+                 </button>
+             )}
+        </div>
       </aside>
 
       {/* Mobile Header */}
@@ -97,7 +149,35 @@ export default function LandingPage() {
                               {tab.label}
                           </button>
                       ))}
+
                   </nav>
+                  <div className="p-4 border-t border-white/5">
+                       {user ? (
+                           <div className="flex flex-col gap-4">
+                               <div className="flex items-center gap-3 px-2">
+                                   <div className="size-10 rounded-full bg-violet-600/20 flex items-center justify-center text-violet-400">
+                                       <UserIcon size={20} />
+                                   </div>
+                                   <div className="flex-1 min-w-0">
+                                       <p className="text-base font-medium truncate">{user.email}</p>
+                                   </div>
+                               </div>
+                               <button
+                                   onClick={handleLogout}
+                                   className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-lg font-medium transition-colors"
+                               >
+                                   <LogOut size={20} /> Log Out
+                               </button>
+                           </div>
+                       ) : (
+                           <button
+                               onClick={() => window.location.href = '/login'}
+                               className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-lg font-medium transition-colors"
+                           >
+                               Log In
+                           </button>
+                       )}
+                  </div>
               </motion.div>
           )}
       </AnimatePresence>
