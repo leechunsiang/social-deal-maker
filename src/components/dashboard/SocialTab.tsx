@@ -713,7 +713,7 @@ export function SocialTab() {
                             >
                             {/* Avatar */}
                             <div className={cn(
-                                "flex-shrink-0 size-8 rounded-full flex items-center justify-center border",
+                                "shrink-0 size-8 rounded-full flex items-center justify-center border",
                                 type === 'ai' || type === 'me'
                                 ? "bg-violet-600/20 border-violet-500/30 text-violet-400" 
                                 : "bg-zinc-800 border-white/10 text-zinc-400"

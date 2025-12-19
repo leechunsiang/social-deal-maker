@@ -13,7 +13,7 @@ import { Footer } from '../components/Footer';
 import { cn } from '../lib/utils';
 import { DashboardTab } from '../components/dashboard/DashboardTab';
 import { SocialTab } from '../components/dashboard/SocialTab';
-import { ScheduleTab } from '../components/dashboard/ScheduleTab';
+import ScheduleTab from '../components/dashboard/ScheduleTab';
 import { VideoTab } from '../components/dashboard/VideoTab';
 
 type Tab = 'dashboard' | 'social' | 'schedule' | 'video';
