@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { media_url, caption, post_type } = await req.json();
+    const { media_urls, media_url, caption, post_type } = await req.json();
 
     const igAccessToken = Deno.env.get("IG_ACCESS_TOKEN");
     const igId = Deno.env.get("IG_ID") || Deno.env.get("VITE_IG_ID");
@@ -21,80 +21,151 @@ serve(async (req) => {
       throw new Error("Missing Instagram credentials.");
     }
 
-    if (!media_url) {
-      throw new Error("media_url is required");
+    // Normalize media to array
+    let urls: string[] = media_urls || [];
+    if (urls.length === 0 && media_url) urls = [media_url];
+
+    if (urls.length === 0) {
+      throw new Error(
+        "No media provided (media_urls array or media_url string required)"
+      );
     }
 
-    // 1. Create Media Container
-    let containerUrl = `https://graph.instagram.com/v24.0/${igId}/media`;
-    let containerParams: any = {
-      access_token: igAccessToken,
-      caption: caption || "",
+    // Auto-detect Carousel if multiple URLs provided for a POST
+    let actualType = post_type;
+    if ((!actualType || actualType === "POST") && urls.length > 1) {
+      console.log(`Auto-detecting CAROUSEL due to ${urls.length} URLs.`);
+      actualType = "CAROUSEL";
+    }
+
+    // Helper to create single container (Item or Standalone)
+    const createContainer = async (
+      url: string,
+      isCarouselItem: boolean = false
+    ) => {
+      const isVideo = url.includes(".mp4") || url.includes(".mov");
+      let params: any = { access_token: igAccessToken };
+
+      if (isCarouselItem) {
+        params.is_carousel_item = true;
+        if (isVideo) {
+          params.video_url = url;
+          params.media_type = "VIDEO"; // Required for video items in carousel
+        } else {
+          params.image_url = url;
+          // media_type not strictly required for image items, defaults OK
+        }
+      } else {
+        // Standalone Post logic
+        params.caption = caption || "";
+        if (actualType === "STORY") {
+          params.media_type = "STORIES";
+          if (isVideo) params.video_url = url;
+          else params.image_url = url;
+        } else if (actualType === "REEL") {
+          params.media_type = "REELS";
+          params.video_url = url;
+        } else {
+          // Default Feed Post
+          if (isVideo) {
+            params.media_type = "REELS"; // IG encourages REELS for video
+            params.video_url = url;
+          } else {
+            params.image_url = url;
+          }
+        }
+      }
+
+      const qs = new URLSearchParams(params).toString();
+      const res = await fetch(
+        `https://graph.instagram.com/v24.0/${igId}/media?${qs}`,
+        {
+          method: "POST",
+        }
+      );
+      const data = await res.json();
+
+      if (data.error) {
+        throw new Error(
+          `Container Creation Error (${isCarouselItem ? "Item" : "Single"}): ${
+            data.error.message
+          }`
+        );
+      }
+      return data.id;
     };
 
-    if (post_type === "STORY") {
-      containerParams.media_type = "STORIES";
-      if (media_url.includes(".mp4") || media_url.includes(".mov")) {
-        containerParams.video_url = media_url;
-        containerParams.media_type = "STORIES"; // Video story? Check Docs. Actually video_url implies video.
-        // For stories, media_type=STORIES is correct. content can be image_url or video_url.
-      } else {
-        containerParams.image_url = media_url;
+    let creationId;
+
+    if (actualType === "CAROUSEL" && urls.length > 0) {
+      console.log(`Creating Carousel with ${urls.length} items (IDs)...`);
+
+      // 1. Create Carousel Items
+      const itemIds = await Promise.all(
+        urls.map((url) => createContainer(url, true))
+      );
+      console.log("Item IDs created:", itemIds);
+
+      // 2. Create Carousel Parent (Using JSON Body as per docs)
+      const searchParams = new URLSearchParams({ access_token: igAccessToken });
+
+      // Reverting to comma-separated STRING for children as per User's curl example.
+      // previous attempt with Array failed with 400.
+      const parentBody = {
+        media_type: "CAROUSEL",
+        children: itemIds.join(","), // Comma-separated STRING
+        caption: caption || "",
+      };
+
+      console.log(
+        "Creating Parent Container with body:",
+        JSON.stringify(parentBody)
+      );
+
+      const res = await fetch(
+        `https://graph.instagram.com/v24.0/${igId}/media?${searchParams}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(parentBody),
+        }
+      );
+      const data = await res.json();
+
+      if (data.error) {
+        console.error("Carousel Parent Creation Failed:", data.error);
+        throw new Error(`Carousel Parent Error: ${data.error.message}`);
       }
-    } else if (post_type === "REEL") {
-      containerParams.media_type = "REELS";
-      containerParams.video_url = media_url;
+      creationId = data.id;
+      console.log("Carousel Parent ID:", creationId);
     } else {
-      // Default: Feed Post
-      if (media_url.includes(".mp4") || media_url.includes(".mov")) {
-        containerParams.media_type = "REELS"; // Instagram mostly forces Video -> Reel now
-        containerParams.video_url = media_url;
-      } else {
-        containerParams.image_url = media_url;
-      }
+      // Single Item
+      console.log(
+        `Creating Single Post (Type: ${actualType}, URLs: ${urls.length})...`
+      );
+      creationId = await createContainer(urls[0], false);
     }
 
-    // Construct query string
-    const qs = new URLSearchParams(containerParams).toString();
-    console.log(
-      `Creating container: ${containerUrl}?${qs.replace(
-        igAccessToken,
-        "REDACTED"
-      )}`
-    );
+    console.log(`Creation ID: ${creationId}. Waiting for processing...`);
 
-    const containerRes = await fetch(`${containerUrl}?${qs}`, {
-      method: "POST",
-    });
-    const containerData = await containerRes.json();
-
-    if (containerData.error) {
-      throw new Error(`Container Error: ${containerData.error.message}`);
+    // Wait logic (Naively wait mostly for videos)
+    // In production, should check connection status.
+    if (
+      urls.some((u) => u.includes(".mp4")) ||
+      actualType === "REEL" ||
+      actualType === "CAROUSEL"
+    ) {
+      await new Promise((r) => setTimeout(r, 10000)); // Wait 10s for transcoding/linking
     }
 
-    const creationId = containerData.id;
-    console.log(`Container created: ${creationId}`);
-
-    // Wait slightly? Instagram sometimes needs time to process video.
-    // For images it's fast. For videos, we might need to query status.
-    // Simple implementation: try publish immediately. If fails due to "not ready", we fail.
-    // A better approach is to loop check status, but for this MVP 'Post Now', let's try.
-    // However, if it is video, we probably should wait or check status.
-
-    // 2. Publish Container
+    // 3. Publish
     const publishUrl = `https://graph.instagram.com/v24.0/${igId}/media_publish`;
     const publishParams = new URLSearchParams({
       access_token: igAccessToken,
       creation_id: creationId,
     });
 
-    // Check status if video (simple delay for now if REEL or Video)
-    if (post_type === "REEL" || media_url.includes(".mp4")) {
-      // Naive wait 5 seconds
-      await new Promise((r) => setTimeout(r, 5000));
-    }
-
-    console.log(`Publishing container: ${creationId}`);
+    console.log(`Publishing...`);
     const publishRes = await fetch(`${publishUrl}?${publishParams}`, {
       method: "POST",
     });
@@ -109,6 +180,7 @@ serve(async (req) => {
       status: 200,
     });
   } catch (error) {
+    console.error("Edge Function Error:", error);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 400,

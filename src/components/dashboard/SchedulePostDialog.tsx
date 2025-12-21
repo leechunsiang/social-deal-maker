@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
-import { Image as ImageIcon, Video, Loader2, Upload, X } from 'lucide-react';
+import { Image as ImageIcon, Video, Loader2, Upload, X, Plus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { format, isSameDay } from 'date-fns';
 import { TimePicker } from './TimePicker';
@@ -25,8 +25,8 @@ const POST_TYPES = [
 ] as const;
 
 export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePostDialogProps) {
-  const [mediaFile, setMediaFile] = useState<File | null>(null);
-  const [mediaPreview, setMediaPreview] = useState<string | null>(null);
+  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
+  const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
   const [caption, setCaption] = useState('');
   
   // State changes for features
@@ -38,12 +38,24 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setMediaFile(file);
-      const url = URL.createObjectURL(file);
-      setMediaPreview(url);
+    if (e.target.files && e.target.files.length > 0) {
+      const newFiles = Array.from(e.target.files);
+      addFiles(newFiles);
     }
+  };
+
+  const addFiles = (files: File[]) => {
+      const validFiles = files.slice(0, 10 - mediaFiles.length); // Limit to 10
+      if (validFiles.length === 0) return;
+
+      setMediaFiles(prev => [...prev, ...validFiles]);
+      const newPreviews = validFiles.map(file => URL.createObjectURL(file));
+      setMediaPreviews(prev => [...prev, ...newPreviews]);
+  };
+
+  const removeFile = (index: number) => {
+      setMediaFiles(prev => prev.filter((_, i) => i !== index));
+      setMediaPreviews(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -52,17 +64,15 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0];
-      setMediaFile(file);
-      const url = URL.createObjectURL(file);
-      setMediaPreview(url);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const newFiles = Array.from(e.dataTransfer.files);
+      addFiles(newFiles);
     }
   };
 
-  const clearFile = () => {
-    setMediaFile(null);
-    setMediaPreview(null);
+  const clearAll = () => {
+    setMediaFiles([]);
+    setMediaPreviews([]);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -79,37 +89,35 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
   };
 
   const handleSave = async () => {
-    if (!selectedDate || !mediaFile || selectedPostTypes.length === 0) return;
+    if (!selectedDate || mediaFiles.length === 0 || selectedPostTypes.length === 0) return;
 
     setIsSubmitting(true);
     try {
-      // 1. Upload Media
-      const fileExt = mediaFile.name.split('.').pop();
-      const fileName = `${Math.random()}.${fileExt}`;
-      const filePath = `${fileName}`;
+      // 1. Upload All Media
+      const uploadPromises = mediaFiles.map(async (file) => {
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${Math.random()}.${fileExt}`;
+          const filePath = `${fileName}`;
+          
+          const { error: uploadError } = await supabase.storage
+            .from('posts')
+            .upload(filePath, file);
 
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('posts')
-        .upload(filePath, mediaFile);
+          if (uploadError) {
+              console.error('Upload Error:', uploadError);
+              // Fallback for demo if missing bucket
+              return URL.createObjectURL(file);
+          } else {
+              const { data: urlData } = supabase.storage.from('posts').getPublicUrl(filePath);
+              return urlData.publicUrl;
+          }
+      });
 
-      let publicUrl = '';
-      
-      if (uploadError) {
-        console.error('Upload Error:', uploadError);
-        console.warn('Using fake URL due to upload failure (likely bucket missing)');
-        publicUrl = URL.createObjectURL(mediaFile); 
-      } else {
-        const { data: urlData } = supabase.storage.from('posts').getPublicUrl(filePath);
-        publicUrl = urlData.publicUrl;
-      }
+      const uploadedUrls = await Promise.all(uploadPromises);
+      const mainMediaUrl = uploadedUrls[0]; // Use first image as thumbnail
 
       // 2. Insert into Database (Loop through selected types)
       const { data: { user } } = await supabase.auth.getUser();
-      // FALLBACK FOR DEMO: If no user, use a random UUID to allow UI testing, or throwing error if strict.
-      // Since this is a dashboard demo without login flow implemented in this view, we'll try to use the user if present,
-      // otherwise we will alert the user they need to be logged in, OR we could mock it.
-      // Given the "proceed" instruction and console error, let's make it robust but clear.
-      
       const userId = user?.id;
 
       if (!userId) {
@@ -129,15 +137,22 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
       }
 
       // Create one record per selected type
-      const recordsToInsert = selectedPostTypes.map(type => ({
+      const recordsToInsert = selectedPostTypes.map(type => {
+          // If multiple files and type is POST, it's a Carousel
+          const isCarousel = type === 'POST' && mediaFiles.length > 1;
+          const finalType = isCarousel ? 'CAROUSEL' : type;
+
+          return {
             user_id: userId,
-            media_url: publicUrl,
+            media_url: mainMediaUrl, // Thumbnail
+            media_urls: uploadedUrls, // Full list
             caption,
-            post_type: type,
+            post_type: finalType,
             scheduled_at: scheduledAt.toISOString(),
             status: postNow ? 'published' : 'scheduled', 
             created_at: new Date().toISOString()
-      }));
+          };
+      });
 
       const { error: dbError } = await supabase
         .from('scheduled_posts')
@@ -145,32 +160,35 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
 
       if (dbError) throw dbError;
 
-      // 3. If Post Now, trigger Edge Function immediately for each post
+      // 3. If Post Now, trigger Edge Function immediately
       if (postNow) {
           for (const type of selectedPostTypes) {
+             // Logic: If > 1 file and type is POST -> send as CAROUSEL with array
+             const isCarousel = type === 'POST' && mediaFiles.length > 1;
+             
+             const payload = {
+                 media_urls: uploadedUrls, // Send array
+                 media_url: uploadedUrls[0], // Fallback/Thumbnail
+                 caption: caption,
+                 post_type: isCarousel ? 'CAROUSEL' : type
+             };
+
              const { data, error: funcError } = await supabase.functions.invoke('publish-instagram-post', {
-                body: {
-                    media_url: publicUrl,
-                    caption: caption,
-                    post_type: type
-                }
+                body: payload
              });
 
              if (funcError || data?.error) {
                  console.error(`Failed to publish ${type}:`, funcError || data?.error);
-                 // Optional: Update status in DB to 'failed'
-                 // For now just alert/log, as the DB record says 'published' (optimistic)
-                 alert(`Failed to publish ${type} to Instagram. Check console.`);
+                 alert(`Failed to publish ${type}. Check console.`);
              } else {
-                 console.log(`Successfully published ${type} to Instagram`);
+                 console.log(`Successfully published ${type}`);
              }
           }
       }
       
       onClose();
       // Reset form
-      setMediaFile(null);
-      setMediaPreview(null);
+      clearAll();
       setCaption('');
       setTime('12:00');
       setSelectedPostTypes(['POST']);
@@ -196,45 +214,62 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
         
         <div className="grid gap-4 py-4">
           
-          {/* Media Upload */}
-          <div className="grid gap-2">
-            <Label>Media</Label>
-            {!mediaPreview ? (
-                <div 
-                    className="border-2 border-dashed border-zinc-800 rounded-lg p-6 flex flex-col items-center justify-center cursor-pointer hover:bg-zinc-900/50 transition-colors"
-                    onClick={() => fileInputRef.current?.click()}
-                    onDragOver={handleDragOver}
-                    onDrop={handleDrop}
-                >
-                    <Upload className="h-8 w-8 text-zinc-500 mb-2" />
-                    <p className="text-sm text-zinc-500 font-medium">Click or drag file to upload</p>
-                    <p className="text-xs text-zinc-600">Images or Videos</p>
-                </div>
-            ) : (
-                <div className="relative rounded-lg overflow-hidden border border-zinc-800 bg-black aspect-video flex items-center justify-center">
-                    {mediaFile?.type.startsWith('video') ? (
-                        <video src={mediaPreview} className="max-h-full max-w-full" controls />
-                    ) : (
-                        <img src={mediaPreview} alt="Preview" className="max-h-full max-w-full object-contain" />
-                    )}
-                    <Button 
-                        size="icon" 
-                        variant="destructive" 
-                        className="absolute top-2 right-2 h-6 w-6 rounded-full"
-                        onClick={(e) => { e.stopPropagation(); clearFile(); }}
-                    >
-                        <X className="h-3 w-3" />
-                    </Button>
-                </div>
-            )}
-            <input 
-                type="file" 
-                ref={fileInputRef} 
-                className="hidden" 
-                accept="image/*,video/*" 
-                onChange={handleFileSelect} 
-            />
-          </div>
+            {/* Media Upload */}
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                  <Label>Media (Max 10)</Label>
+                  <span className="text-xs text-zinc-500">{mediaFiles.length} / 10</span>
+              </div>
+              
+              {mediaPreviews.length === 0 ? (
+                  <div 
+                      className="border-2 border-dashed border-zinc-800 rounded-lg p-6 flex flex-col items-center justify-center cursor-pointer hover:bg-zinc-900/50 transition-colors"
+                      onClick={() => fileInputRef.current?.click()}
+                      onDragOver={handleDragOver}
+                      onDrop={handleDrop}
+                  >
+                      <Upload className="h-8 w-8 text-zinc-500 mb-2" />
+                      <p className="text-sm text-zinc-500 font-medium">Click or drag file to upload</p>
+                      <p className="text-xs text-zinc-600">Images or Videos</p>
+                  </div>
+              ) : (
+                  <div className="grid grid-cols-3 gap-2">
+                      {mediaPreviews.map((url, idx) => (
+                           <div key={url} className="relative rounded-lg overflow-hidden border border-zinc-800 bg-black aspect-square flex items-center justify-center group">
+                                {mediaFiles[idx]?.type.startsWith('video') ? (
+                                    <video src={url} className="max-h-full max-w-full object-cover" />
+                                ) : (
+                                    <img src={url} alt={`Preview ${idx}`} className="h-full w-full object-cover" />
+                                )}
+                                <Button 
+                                    size="icon" 
+                                    variant="destructive" 
+                                    className="absolute top-1 right-1 h-5 w-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={(e) => { e.stopPropagation(); removeFile(idx); }}
+                                >
+                                    <X className="h-3 w-3" />
+                                </Button>
+                           </div>
+                      ))}
+                      {mediaFiles.length < 10 && (
+                          <div 
+                            className="aspect-square border-2 border-dashed border-zinc-800 rounded-lg flex items-center justify-center cursor-pointer hover:bg-zinc-900/50 transition-colors"
+                            onClick={() => fileInputRef.current?.click()}
+                          >
+                              <Plus className="h-6 w-6 text-zinc-600" />
+                          </div>
+                      )}
+                  </div>
+              )}
+              <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  className="hidden" 
+                  accept="image/*,video/*" 
+                  multiple
+                  onChange={handleFileSelect} 
+              />
+            </div>
 
           {/* Post Type (Multi-Select) */}
           <div className="grid gap-2">
@@ -310,7 +345,7 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
 
         <DialogFooter>
           <Button variant="ghost" onClick={onClose} disabled={isSubmitting}>Cancel</Button>
-          <Button onClick={handleSave} disabled={isSubmitting || !mediaFile || selectedPostTypes.length === 0}>
+          <Button onClick={handleSave} disabled={isSubmitting || mediaFiles.length === 0 || selectedPostTypes.length === 0}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {postNow ? 'Post Now' : 'Schedule'}
           </Button>
