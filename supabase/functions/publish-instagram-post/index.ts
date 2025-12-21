@@ -148,14 +148,35 @@ serve(async (req) => {
 
     console.log(`Creation ID: ${creationId}. Waiting for processing...`);
 
-    // Wait logic (Naively wait mostly for videos)
-    // In production, should check connection status.
-    if (
-      urls.some((u) => u.includes(".mp4")) ||
-      actualType === "REEL" ||
-      actualType === "CAROUSEL"
-    ) {
-      await new Promise((r) => setTimeout(r, 10000)); // Wait 10s for transcoding/linking
+    // Poll for container status
+    let attempts = 0;
+    const maxAttempts = 10;
+    while (attempts < maxAttempts) {
+      const statusUrl = `https://graph.instagram.com/v24.0/${creationId}?fields=status_code,status&access_token=${igAccessToken}`;
+      const statusRes = await fetch(statusUrl);
+      const statusData = await statusRes.json();
+
+      console.log(
+        `Container Status (${attempts + 1}/${maxAttempts}):`,
+        statusData
+      );
+
+      if (statusData.status_code === "FINISHED") {
+        break;
+      }
+      if (statusData.status_code === "ERROR") {
+        throw new Error(`Container Processing Failed: ${statusData.status}`);
+      }
+
+      // Wait 3 seconds before next check
+      await new Promise((r) => setTimeout(r, 3000));
+      attempts++;
+    }
+
+    if (attempts === maxAttempts) {
+      console.warn(
+        "Timed out waiting for container to be ready. Attempting publish anyway..."
+      );
     }
 
     // 3. Publish

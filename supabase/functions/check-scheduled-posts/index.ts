@@ -22,7 +22,7 @@ serve(async (req) => {
     // We use 'lte' (less than or equal) to current time.
     // And 'status' must be 'scheduled'.
     const now = new Date().toISOString();
-    log(`Checking for posts due before ${now}...`);
+    log(`Checking for posts due before ${now}... (Version: Debug-Enhanced)`);
 
     const { data: posts, error } = await supabase
       .from("scheduled_posts")
@@ -61,8 +61,16 @@ serve(async (req) => {
           });
 
         if (publishError) {
+          const errorDetails =
+            publishError instanceof Error
+              ? publishError.message
+              : JSON.stringify(publishError);
+          const fullContext = JSON.stringify(
+            publishError,
+            Object.getOwnPropertyNames(publishError)
+          );
           errorLog(`Publish Invoke Error for ${post.id}`, publishError);
-          throw new Error(publishError.message || "Invoke failed");
+          throw new Error(`Invoke Failed: ${errorDetails} ::: ${fullContext}`);
         }
 
         if (publishData && publishData.error) {
