@@ -1,7 +1,6 @@
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Plus, Image as ImageIcon, Video, Calendar } from 'lucide-react';
+import { Image as ImageIcon, Video, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -19,10 +18,9 @@ interface DayDetailsDialogProps {
   onClose: () => void;
   date: Date;
   posts: ScheduledPost[];
-  onAddEvent: () => void;
 }
 
-export function DayDetailsDialog({ isOpen, onClose, date, posts, onAddEvent }: DayDetailsDialogProps) {
+export function DayDetailsDialog({ isOpen, onClose, date, posts }: DayDetailsDialogProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="bg-zinc-950 border-white/10 text-white sm:max-w-[425px]">
@@ -85,12 +83,7 @@ export function DayDetailsDialog({ isOpen, onClose, date, posts, onAddEvent }: D
             )}
         </div>
 
-        <div className="flex justify-end">
-            <Button onClick={onAddEvent} className="w-full gap-2 bg-white text-black hover:bg-zinc-200">
-                <Plus className="h-4 w-4" />
-                Schedule New Post
-            </Button>
-        </div>
+
       </DialogContent>
     </Dialog>
   );

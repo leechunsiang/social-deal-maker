@@ -47,13 +47,18 @@ export default function ScheduleTab() {
   
   const [posts, setPosts] = useState<ScheduledPost[]>([]);
 
-  const onDateClick = (d: Date) => {
-      setSelectedDate(d);
-      if (date && !isSameMonth(d, date)) {
-          setDate(d);
-      }
-      setIsDetailsOpen(true); // Open Details instead of Create immediately
-  };
+       const onDateClick = (d: Date) => {
+          setSelectedDate(d);
+          if (date && !isSameMonth(d, date)) {
+              setDate(d);
+          }
+       };
+
+       const onDateDoubleClick = (d: Date) => {
+          setSelectedDate(d);
+          setIsDetailsOpen(true);
+       };
+
     
   // Month Navigation
   const handlePrevMonth = () => {
@@ -166,6 +171,7 @@ export default function ScheduleTab() {
                 date={date} 
                 selectedDate={selectedDate} 
                 onSelectDate={onDateClick} 
+                onDoubleClickDate={onDateDoubleClick}
                 posts={posts}
             />
           )}
@@ -179,7 +185,6 @@ export default function ScheduleTab() {
             onClose={() => setIsDetailsOpen(false)}
             date={selectedDate}
             posts={posts.filter(p => isSameDay(new Date(p.scheduled_at), selectedDate || new Date()))}
-            onAddEvent={handleAddEventFromDetails}
           />
       )}
 
@@ -194,7 +199,15 @@ export default function ScheduleTab() {
 
 // ... CalendarGridProps
 
-function CalendarGrid({ date, selectedDate, onSelectDate, posts }: CalendarGridProps) {
+interface CalendarGridProps {
+  date: Date | undefined;
+  selectedDate: Date | undefined;
+  onSelectDate: (date: Date) => void;
+  onDoubleClickDate: (date: Date) => void;
+  posts: ScheduledPost[];
+}
+
+function CalendarGrid({ date, selectedDate, onSelectDate, onDoubleClickDate, posts }: CalendarGridProps) {
       if (!date) return null;
       // ... (existing date calcs)
       const monthStart = startOfMonth(date);
@@ -227,6 +240,7 @@ function CalendarGrid({ date, selectedDate, onSelectDate, posts }: CalendarGridP
                            <div 
                             key={dayItem.toString()}
                             onClick={() => onSelectDate(dayItem)}
+                            onDoubleClick={() => onDoubleClickDate(dayItem)}
                             className={cn(
                                 "min-h-[100px] border-r border-b border-zinc-800 p-2 relative transition-colors cursor-pointer flex flex-col gap-1 group",
                                 isSelected ? "bg-violet-900/10" : "bg-zinc-950/30 hover:bg-zinc-900/50",
