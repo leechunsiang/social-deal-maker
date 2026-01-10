@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Facebook, Instagram, Filter, RefreshCw } from 'lucide-react';
+import { Facebook, Instagram, Filter, RefreshCw, MessageCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
+import { CommentsDialog } from './CommentsDialog';
 
 interface PublishedPost {
   id: string;
@@ -14,6 +15,7 @@ interface PublishedPost {
   scheduled_at: string;
   status: 'scheduled' | 'published' | 'failed';
   platform: string;
+  fb_post_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -64,6 +66,8 @@ export function MyFeedTab() {
   const [loading, setLoading] = useState(true);
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('all');
   const [refreshing, setRefreshing] = useState(false);
+  const [commentsDialogOpen, setCommentsDialogOpen] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<PublishedPost | null>(null);
 
   const fetchPublishedPosts = useCallback(async () => {
     try {
@@ -253,11 +257,41 @@ export function MyFeedTab() {
                       {format(new Date(post.scheduled_at), 'h:mm a')}
                     </span>
                   </div>
+                  
+                  {/* View Comments Button (Facebook only) */}
+                  {post.platform.toLowerCase().includes('facebook') && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 gap-1.5 text-xs"
+                      onClick={() => {
+                        setSelectedPost(post);
+                        setCommentsDialogOpen(true);
+                      }}
+                    >
+                      <MessageCircle className="w-3 h-3" />
+                      Comments
+                    </Button>
+                  )}
                 </div>
               </div>
             </motion.div>
           ))}
         </div>
+      )}
+      
+      {/* Comments Dialog */}
+      {selectedPost && (
+        <CommentsDialog
+          isOpen={commentsDialogOpen}
+          onClose={() => {
+            setCommentsDialogOpen(false);
+            setSelectedPost(null);
+          }}
+          postId={selectedPost.id}
+          fbPostId={selectedPost.fb_post_id || null}
+          platform={selectedPost.platform}
+        />
       )}
     </div>
   );

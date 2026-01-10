@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,7 +15,12 @@ serve(async (req) => {
   try {
     const body = await req.json();
     console.log("Request Body:", JSON.stringify(body));
-    const { media_urls, media_url, caption } = body;
+    const { media_urls, media_url, caption, post_id } = body;
+
+    // Initialize Supabase client
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const fbAccessToken =
       Deno.env.get("FB_ACCESS_TOKEN") || Deno.env.get("FACEBOOK_ACCESS_TOKEN");
@@ -77,6 +83,20 @@ serve(async (req) => {
 
     // Data usually contains 'id' or 'post_id'
     const resultId = data.id || data.post_id;
+
+    // Update the scheduled_posts record with the Facebook post ID
+    if (post_id && resultId) {
+      const { error: updateError } = await supabase
+        .from("scheduled_posts")
+        .update({ fb_post_id: resultId })
+        .eq("id", post_id);
+
+      if (updateError) {
+        console.error("Error updating fb_post_id:", updateError);
+      } else {
+        console.log(`Updated post ${post_id} with fb_post_id: ${resultId}`);
+      }
+    }
 
     return new Response(JSON.stringify({ success: true, id: resultId }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

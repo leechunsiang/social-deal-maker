@@ -170,28 +170,30 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
           });
       });
 
-      const { error: dbError } = await supabase
+      const { data: insertedPosts, error: dbError } = await supabase
         .from('scheduled_posts')
-        .insert(recordsToInsert);
+        .insert(recordsToInsert)
+        .select();
 
       if (dbError) throw dbError;
 
       // 3. If Post Now, trigger Edge Function immediately
-      if (postNow) {
-          // Iterate over the records we just prepared (logic-wise)
-          for (const record of recordsToInsert) {
-             const { platform, post_type, media_urls, media_url, caption } = record;
+      if (postNow && insertedPosts) {
+          // Iterate over the inserted posts
+          for (const post of insertedPosts) {
+             const { id, platform, post_type, media_urls, media_url, caption } = post;
              
              const targetFunction = platform === 'facebook' ? 'publish-facebook-post' : 'publish-instagram-post';
 
              const payload = {
+                 post_id: id, // Pass the post ID
                  media_urls: media_urls, 
                  media_url: media_url, 
                  caption: caption,
                  post_type: post_type
              };
 
-             console.log(`Invoking ${targetFunction}...`);
+             console.log(`Invoking ${targetFunction} for post ${id}...`);
              const { data, error: funcError } = await supabase.functions.invoke(targetFunction, {
                 body: payload
              });

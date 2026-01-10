@@ -45,6 +45,7 @@ serve(async (req) => {
       try {
         // Prepare payload
         const payload = {
+          post_id: post.id,
           caption: post.caption,
           post_type: post.post_type,
           media_url: post.media_url,
