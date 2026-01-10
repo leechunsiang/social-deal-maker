@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   LayoutDashboard,
   Share2, 
@@ -8,7 +8,8 @@ import {
   Menu,
   X,
   LogOut,
-  User as UserIcon
+  User as UserIcon,
+  Rss
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Footer } from '../components/Footer';
@@ -17,10 +18,11 @@ import { DashboardTab } from '../components/dashboard/DashboardTab';
 import { SocialTab } from '../components/dashboard/SocialTab';
 import ScheduleTab from '../components/dashboard/ScheduleTab';
 import { VideoTab } from '../components/dashboard/VideoTab';
+import { MyFeedTab } from '../components/dashboard/MyFeedTab';
 import { supabase } from '../lib/supabase';
 import type { User } from '@supabase/supabase-js';
 
-type Tab = 'dashboard' | 'social' | 'schedule' | 'video';
+type Tab = 'dashboard' | 'feed' | 'social' | 'schedule' | 'video';
 
 export default function LandingPage() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
@@ -48,6 +50,7 @@ export default function LandingPage() {
 
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'feed', label: 'My Feed', icon: Rss },
     { id: 'social', label: 'Social', icon: Share2 },
     { id: 'schedule', label: 'Schedule', icon: Calendar },
     { id: 'video', label: 'Video', icon: Video },
@@ -193,6 +196,7 @@ export default function LandingPage() {
               </header>
               
               {activeTab === 'dashboard' && <DashboardTab />}
+              {activeTab === 'feed' && <MyFeedTab />}
               {activeTab === 'social' && <SocialTab />}
               {activeTab === 'schedule' && <ScheduleTab />}
               {activeTab === 'video' && <VideoTab />}

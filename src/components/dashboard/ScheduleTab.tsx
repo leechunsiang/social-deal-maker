@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase';
 
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, Grid, List, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Facebook, Instagram, Linkedin, Twitter } from 'lucide-react';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, startOfWeek, endOfWeek } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { DayDetailsDialog } from './DayDetailsDialog';
@@ -15,8 +15,21 @@ interface ScheduledPost {
   post_type: 'POST' | 'REEL' | 'STORY';
   scheduled_at: string;
   status: 'scheduled' | 'published' | 'failed';
-  caption?: string; 
+  caption?: string;
+  platform?: string;
 }
+
+const getPlatformIcon = (platform?: string) => {
+  if (!platform) return null;
+  const p = platform.toLowerCase();
+  
+  if (p.includes('facebook')) return <Facebook className="w-3 h-3" />;
+  if (p.includes('instagram')) return <Instagram className="w-3 h-3" />;
+  if (p.includes('linkedin')) return <Linkedin className="w-3 h-3" />;
+  if (p.includes('twitter') || p.includes('x')) return <Twitter className="w-3 h-3" />;
+  
+  return <span className="text-[9px] uppercase font-bold">{platform.substring(0, 2)}</span>;
+};
 
 const POST_COLORS = [
     'bg-pink-500 text-white border-pink-600',
@@ -271,7 +284,13 @@ function CalendarGrid({ date, selectedDate, onSelectDate, onDoubleClickDate, pos
                                                colorClass
                                            )}>
                                                 {/* Dot/Icon */}
-                                                {post.post_type === 'STORY' && <div className="w-1.5 h-1.5 rounded-full bg-white/80 shrink-0" />}
+                                                {post.platform ? (
+                                                    <div className="shrink-0 text-white/90">
+                                                        {getPlatformIcon(post.platform)}
+                                                    </div>
+                                                ) : post.post_type === 'STORY' && (
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-white/80 shrink-0" />
+                                                )}
                                                 
                                                 <span className="truncate font-bold">
                                                     {post.post_type} {post.status === 'published' ? '✓' : ''}

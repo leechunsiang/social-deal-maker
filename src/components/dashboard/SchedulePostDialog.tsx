@@ -2,12 +2,11 @@
 import React, { useState, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
-import { Image as ImageIcon, Video, Loader2, Upload, X, Plus } from 'lucide-react';
+import { Loader2, Upload, X, Plus } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { format, isSameDay } from 'date-fns';
 import { TimePicker } from './TimePicker';
@@ -31,6 +30,7 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
   
   // State changes for features
   const [selectedPostTypes, setSelectedPostTypes] = useState<string[]>(['POST']);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['instagram']);
   const [postNow, setPostNow] = useState(false);
   
   const [time, setTime] = useState('12:00');
@@ -79,7 +79,6 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
   const togglePostType = (typeId: string) => {
       setSelectedPostTypes(prev => {
           if (prev.includes(typeId)) {
-              // Prevent unselecting the last one? Optional, but good UX.
               if (prev.length === 1) return prev; 
               return prev.filter(t => t !== typeId);
           } else {
@@ -88,8 +87,19 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
       });
   };
 
+  const togglePlatform = (platformId: string) => {
+    setSelectedPlatforms(prev => {
+        if (prev.includes(platformId)) {
+            if (prev.length === 1) return prev;
+            return prev.filter(p => p !== platformId);
+        } else {
+            return [...prev, platformId];
+        }
+    });
+  };
+
   const handleSave = async () => {
-    if (!selectedDate || mediaFiles.length === 0 || selectedPostTypes.length === 0) return;
+    if (!selectedDate || mediaFiles.length === 0 || selectedPostTypes.length === 0 || selectedPlatforms.length === 0) return;
 
     setIsSubmitting(true);
     try {
@@ -116,7 +126,7 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
       const uploadedUrls = await Promise.all(uploadPromises);
       const mainMediaUrl = uploadedUrls[0]; // Use first image as thumbnail
 
-      // 2. Insert into Database (Loop through selected types)
+      // 2. Insert into Database (Loop through selected types & platforms)
       const { data: { user } } = await supabase.auth.getUser();
       const userId = user?.id;
 
@@ -136,22 +146,28 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
           scheduledAt.setMinutes(minutes);
       }
 
-      // Create one record per selected type
-      const recordsToInsert = selectedPostTypes.map(type => {
-          // If multiple files and type is POST, it's a Carousel
-          const isCarousel = type === 'POST' && mediaFiles.length > 1;
-          const finalType = isCarousel ? 'CAROUSEL' : type;
+      // Create records for each Platform + Type combination
+      const recordsToInsert: any[] = [];
+      
+      selectedPlatforms.forEach(platform => {
+          selectedPostTypes.forEach(type => {
+              // Logic: If > 1 file and type is POST -> CAROUSEL
+              // This applies to Instagram mainly, but we store it generic.
+              const isCarousel = type === 'POST' && mediaFiles.length > 1;
+              const finalType = isCarousel ? 'CAROUSEL' : type;
 
-          return {
-            user_id: userId,
-            media_url: mainMediaUrl, // Thumbnail
-            media_urls: uploadedUrls, // Full list
-            caption,
-            post_type: finalType,
-            scheduled_at: scheduledAt.toISOString(),
-            status: postNow ? 'published' : 'scheduled', 
-            created_at: new Date().toISOString()
-          };
+              recordsToInsert.push({
+                user_id: userId,
+                media_url: mainMediaUrl, // Thumbnail
+                media_urls: uploadedUrls, // Full list
+                caption,
+                post_type: finalType,
+                scheduled_at: scheduledAt.toISOString(),
+                status: postNow ? 'published' : 'scheduled', 
+                created_at: new Date().toISOString(),
+                platform: platform // 'instagram' or 'facebook'
+              });
+          });
       });
 
       const { error: dbError } = await supabase
@@ -162,26 +178,29 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
 
       // 3. If Post Now, trigger Edge Function immediately
       if (postNow) {
-          for (const type of selectedPostTypes) {
-             // Logic: If > 1 file and type is POST -> send as CAROUSEL with array
-             const isCarousel = type === 'POST' && mediaFiles.length > 1;
+          // Iterate over the records we just prepared (logic-wise)
+          for (const record of recordsToInsert) {
+             const { platform, post_type, media_urls, media_url, caption } = record;
              
+             const targetFunction = platform === 'facebook' ? 'publish-facebook-post' : 'publish-instagram-post';
+
              const payload = {
-                 media_urls: uploadedUrls, // Send array
-                 media_url: uploadedUrls[0], // Fallback/Thumbnail
+                 media_urls: media_urls, 
+                 media_url: media_url, 
                  caption: caption,
-                 post_type: isCarousel ? 'CAROUSEL' : type
+                 post_type: post_type
              };
 
-             const { data, error: funcError } = await supabase.functions.invoke('publish-instagram-post', {
+             console.log(`Invoking ${targetFunction}...`);
+             const { data, error: funcError } = await supabase.functions.invoke(targetFunction, {
                 body: payload
              });
 
              if (funcError || data?.error) {
-                 console.error(`Failed to publish ${type}:`, funcError || data?.error);
-                 alert(`Failed to publish ${type}. Check console.`);
+                 console.error(`Failed to publish to ${platform}:`, funcError || data?.error);
+                 alert(`Failed to publish to ${platform}. Check console.`);
              } else {
-                 console.log(`Successfully published ${type}`);
+                 console.log(`Successfully published to ${platform}`);
              }
           }
       }
@@ -192,6 +211,7 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
       setCaption('');
       setTime('12:00');
       setSelectedPostTypes(['POST']);
+      setSelectedPlatforms(['instagram']);
       setPostNow(false);
 
     } catch (error) {
@@ -270,6 +290,32 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
                   onChange={handleFileSelect} 
               />
             </div>
+
+          {/* Platform (Multi-Select) */}
+          <div className="grid gap-2">
+              <Label>Platform</Label>
+              <div className="flex items-center gap-4">
+                  {[
+                      { id: 'instagram', label: 'Instagram' },
+                      { id: 'facebook', label: 'Facebook' }
+                  ].map(platform => (
+                      <div key={platform.id} className="flex items-center space-x-2">
+                          <Checkbox 
+                            id={`platform-${platform.id}`} 
+                            checked={selectedPlatforms.includes(platform.id)}
+                            onCheckedChange={() => togglePlatform(platform.id)}
+                            className="border-white/20 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                          />
+                          <Label 
+                            htmlFor={`platform-${platform.id}`} 
+                            className="text-sm font-normal cursor-pointer text-zinc-300"
+                          >
+                            {platform.label}
+                          </Label>
+                      </div>
+                  ))}
+              </div>
+          </div>
 
           {/* Post Type (Multi-Select) */}
           <div className="grid gap-2">

@@ -1,6 +1,6 @@
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Image as ImageIcon, Video, Calendar } from 'lucide-react';
+import { Video, Calendar, Facebook, Instagram, Linkedin, Twitter } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -10,8 +10,21 @@ interface ScheduledPost {
   post_type: 'POST' | 'REEL' | 'STORY';
   scheduled_at: string;
   status: 'scheduled' | 'published' | 'failed';
-  caption?: string; 
+  caption?: string;
+  platform?: string;
 }
+
+const getPlatformIcon = (platform?: string) => {
+  if (!platform) return null;
+  const p = platform.toLowerCase();
+  
+  if (p.includes('facebook')) return <Facebook className="w-3 h-3" />;
+  if (p.includes('instagram')) return <Instagram className="w-3 h-3" />;
+  if (p.includes('linkedin')) return <Linkedin className="w-3 h-3" />;
+  if (p.includes('twitter') || p.includes('x')) return <Twitter className="w-3 h-3" />;
+  
+  return <span className="text-[10px] uppercase font-bold text-zinc-400">{platform}</span>;
+};
 
 interface DayDetailsDialogProps {
   isOpen: boolean;
@@ -55,11 +68,16 @@ export function DayDetailsDialog({ isOpen, onClose, date, posts }: DayDetailsDia
                         <div className="flex flex-col justify-between flex-1 min-w-0">
                             <div className="flex items-start justify-between">
                                 <span className={cn(
-                                    "text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider",
+                                    "text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider inline-flex items-center gap-1",
                                     post.post_type === 'STORY' ? "bg-pink-500/20 text-pink-400" :
                                     post.post_type === 'REEL' ? "bg-blue-500/20 text-blue-400" :
                                     "bg-violet-500/20 text-violet-400"
                                 )}>
+                                    {post.platform && (
+                                        <span className="text-zinc-400">
+                                            {getPlatformIcon(post.platform)}
+                                        </span>
+                                    )}
                                     {post.post_type}
                                 </span>
                                 <span className={cn(

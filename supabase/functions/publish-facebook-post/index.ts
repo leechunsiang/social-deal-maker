@@ -1,0 +1,92 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+};
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  try {
+    const body = await req.json();
+    console.log("Request Body:", JSON.stringify(body));
+    const { media_urls, media_url, caption } = body;
+
+    const fbAccessToken =
+      Deno.env.get("FB_ACCESS_TOKEN") || Deno.env.get("FACEBOOK_ACCESS_TOKEN");
+    const pageId = Deno.env.get("FB_PAGE_ID");
+
+    if (!fbAccessToken || !pageId) {
+      throw new Error(
+        "Missing Facebook credentials (FB_ACCESS_TOKEN/FACEBOOK_ACCESS_TOKEN or FB_PAGE_ID)."
+      );
+    }
+
+    // Normalize media
+    let urls: string[] = media_urls || [];
+    if (urls.length === 0 && media_url) urls = [media_url];
+
+    let endpoint = "";
+    let method = "POST";
+    const params = new URLSearchParams({ access_token: fbAccessToken });
+
+    // Determine post type and endpoint
+    if (urls.length > 0) {
+      // Has media
+      const firstUrl = urls[0];
+      const isVideo =
+        firstUrl.includes(".mp4") ||
+        firstUrl.includes(".mov") ||
+        firstUrl.includes(".webm");
+
+      if (isVideo) {
+        // Video Post
+        endpoint = `https://graph.facebook.com/v20.0/${pageId}/videos`;
+        params.append("file_url", firstUrl);
+        if (caption) params.append("description", caption);
+      } else {
+        // Photo Post
+        endpoint = `https://graph.facebook.com/v20.0/${pageId}/photos`;
+        params.append("url", firstUrl);
+        if (caption) params.append("caption", caption);
+      }
+    } else {
+      // Text only (Feed Post)
+      endpoint = `https://graph.facebook.com/v20.0/${pageId}/feed`;
+      if (caption) params.append("message", caption);
+    }
+
+    console.log(`Publishing to Facebook Page ${pageId} via ${endpoint}...`);
+
+    // Perform request
+    const res = await fetch(`${endpoint}?${params.toString()}`, {
+      method: method,
+    });
+    const data = await res.json();
+
+    if (data.error) {
+      console.error("Facebook API Error:", data.error);
+      throw new Error(`Facebook API Error: ${data.error.message}`);
+    }
+
+    console.log("Facebook Publish Success:", data);
+
+    // Data usually contains 'id' or 'post_id'
+    const resultId = data.id || data.post_id;
+
+    return new Response(JSON.stringify({ success: true, id: resultId }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200,
+    });
+  } catch (error) {
+    console.error("FB Edge Function Error:", error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200, // Return 200 to allow client to read error message
+    });
+  }
+});

@@ -43,7 +43,7 @@ serve(async (req) => {
     for (const post of posts) {
       log(`Processing post ${post.id}...`);
       try {
-        // Prepare payload for publish-instagram-post
+        // Prepare payload
         const payload = {
           caption: post.caption,
           post_type: post.post_type,
@@ -51,12 +51,16 @@ serve(async (req) => {
           media_urls: post.media_urls,
         };
 
+        const targetFunction =
+          post.platform === "facebook"
+            ? "publish-facebook-post"
+            : "publish-instagram-post";
+
+        log(`Invoking ${targetFunction} for post ${post.id}...`);
+
         // Invoke publish function
-        // Note: We use the public URL to invoke the other function,
-        // or we could import the logic if shared code was set up.
-        // Invoking via supabase.functions is standard for decoupling.
         const { data: publishData, error: publishError } =
-          await supabase.functions.invoke("publish-instagram-post", {
+          await supabase.functions.invoke(targetFunction, {
             body: payload,
           });
 
