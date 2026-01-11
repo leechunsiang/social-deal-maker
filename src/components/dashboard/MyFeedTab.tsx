@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Facebook, Instagram, Filter, RefreshCw, MessageCircle } from 'lucide-react';
+import { Facebook, Instagram, Filter, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
-import { CommentsDialog } from './CommentsDialog';
+import { InlineComments } from './InlineComments';
+import { PostAnalytics } from './PostAnalytics';
 
 interface PublishedPost {
   id: string;
@@ -16,6 +17,7 @@ interface PublishedPost {
   status: 'scheduled' | 'published' | 'failed';
   platform: string;
   fb_post_id?: string;
+  ig_post_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -24,27 +26,27 @@ type PlatformFilter = 'all' | 'instagram' | 'facebook';
 
 const getPlatformIcon = (platform: string) => {
   const p = platform.toLowerCase();
-  
+
   if (p.includes('facebook')) {
     return <Facebook className="w-5 h-5 text-blue-500" />;
   }
   if (p.includes('instagram')) {
     return <Instagram className="w-5 h-5 text-pink-500" />;
   }
-  
+
   return <span className="text-xs uppercase font-bold text-zinc-400">{platform}</span>;
 };
 
 const getPlatformBadgeColor = (platform: string) => {
   const p = platform.toLowerCase();
-  
+
   if (p.includes('facebook')) {
     return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
   }
   if (p.includes('instagram')) {
     return 'bg-pink-500/10 text-pink-400 border-pink-500/20';
   }
-  
+
   return 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20';
 };
 
@@ -66,8 +68,6 @@ export function MyFeedTab() {
   const [loading, setLoading] = useState(true);
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('all');
   const [refreshing, setRefreshing] = useState(false);
-  const [commentsDialogOpen, setCommentsDialogOpen] = useState(false);
-  const [selectedPost, setSelectedPost] = useState<PublishedPost | null>(null);
 
   const fetchPublishedPosts = useCallback(async () => {
     try {
@@ -106,10 +106,10 @@ export function MyFeedTab() {
   return (
     <div className="flex-1 overflow-auto">
       {/* Header with Filters */}
-      <div className="sticky top-0 z-10 bg-zinc-950/80 backdrop-blur-xl border-b border-white/5 p-4 mb-6">
+      <div className="sticky top-0 z-10 bg-zinc-950/95 backdrop-blur-xl border-b border-white/5 p-4 mb-6">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold text-white">My Published Posts</h2>
+            <h2 className="text-xl font-bold text-white">My Feed</h2>
             <p className="text-sm text-zinc-400 mt-1">
               {filteredPosts.length} {filteredPosts.length === 1 ? 'post' : 'posts'} published
             </p>
@@ -178,120 +178,104 @@ export function MyFeedTab() {
             </div>
             <h3 className="text-lg font-semibold text-zinc-300 mb-2">No published posts yet</h3>
             <p className="text-sm text-zinc-500">
-              {platformFilter === 'all' 
+              {platformFilter === 'all'
                 ? 'Your published posts will appear here'
                 : `No ${platformFilter} posts found`}
             </p>
           </div>
         </div>
       ) : (
-        /* Posts Grid */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-4">
+        /* Vertical Feed Layout */
+        <div className="max-w-2xl mx-auto px-4 space-y-6 pb-6">
           {filteredPosts.map((post, index) => (
             <motion.div
               key={post.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.05 }}
-              className="bg-zinc-900/50 border border-white/5 rounded-2xl overflow-hidden backdrop-blur-sm hover:bg-zinc-900/80 transition-all duration-300 group"
+              className="bg-zinc-900/50 border border-white/5 rounded-2xl overflow-hidden backdrop-blur-sm"
             >
-              {/* Media Preview */}
-              <div className="relative aspect-square bg-zinc-800/50 overflow-hidden">
+              {/* Post Header */}
+              <div className="p-4 border-b border-white/5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "flex items-center gap-2 px-3 py-1.5 rounded-lg border",
+                      getPlatformBadgeColor(post.platform)
+                    )}>
+                      {getPlatformIcon(post.platform)}
+                      <span className="text-xs font-semibold">{post.platform}</span>
+                    </div>
+                    <div className={cn(
+                      "px-2.5 py-1 rounded-lg border text-xs font-bold",
+                      getPostTypeColor(post.post_type)
+                    )}>
+                      {post.post_type}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-zinc-500">
+                      {format(new Date(post.scheduled_at), 'MMM d, yyyy')}
+                    </p>
+                    <p className="text-xs text-zinc-400">
+                      {format(new Date(post.scheduled_at), 'h:mm a')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Media */}
+              <div className="relative bg-zinc-800/50">
                 {post.media_url && (
                   post.media_url.match(/\.(mp4|mov|avi)$/i) ? (
                     <video
                       src={post.media_url}
-                      className="w-full h-full object-cover"
+                      className="w-full max-h-[600px] object-contain"
+                      controls
                       muted
                     />
                   ) : (
                     <img
                       src={post.media_url}
                       alt={post.caption || 'Post media'}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      className="w-full max-h-[600px] object-contain"
                     />
                   )
                 )}
-                
-                {/* Platform Badge Overlay */}
-                <div className="absolute top-3 right-3 flex items-center gap-2">
-                  <div className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border backdrop-blur-md",
-                    getPlatformBadgeColor(post.platform)
-                  )}>
-                    {getPlatformIcon(post.platform)}
-                  </div>
-                </div>
-
-                {/* Post Type Badge */}
-                <div className="absolute top-3 left-3">
-                  <div className={cn(
-                    "px-2.5 py-1 rounded-lg border text-xs font-bold backdrop-blur-md",
-                    getPostTypeColor(post.post_type)
-                  )}>
-                    {post.post_type}
-                  </div>
-                </div>
               </div>
 
-              {/* Post Details */}
-              <div className="p-4 space-y-3">
-                {/* Caption */}
+              {/* Caption & Details */}
+              <div className="p-4">
                 {post.caption && (
-                  <p className="text-sm text-zinc-300 line-clamp-3">
+                  <p className="text-sm text-zinc-200 whitespace-pre-wrap mb-4">
                     {post.caption}
                   </p>
                 )}
 
-                {/* Metadata */}
-                <div className="flex items-center justify-between pt-3 border-t border-white/5">
-                  <div className="flex flex-col">
-                    <span className="text-xs text-zinc-500">Published</span>
-                    <span className="text-xs font-medium text-zinc-400">
-                      {format(new Date(post.scheduled_at), 'MMM d, yyyy')}
-                    </span>
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <span className="text-xs text-zinc-500">Time</span>
-                    <span className="text-xs font-medium text-zinc-400">
-                      {format(new Date(post.scheduled_at), 'h:mm a')}
-                    </span>
-                  </div>
-                  
-                  {/* View Comments Button (Facebook only) */}
-                  {post.platform.toLowerCase().includes('facebook') && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 gap-1.5 text-xs"
-                      onClick={() => {
-                        setSelectedPost(post);
-                        setCommentsDialogOpen(true);
-                      }}
-                    >
-                      <MessageCircle className="w-3 h-3" />
-                      Comments
-                    </Button>
-                  )}
-                </div>
+                {/* Post Analytics Section */}
+                <PostAnalytics
+                  postId={post.id}
+                  platform={post.platform}
+                  platformPostId={
+                    post.platform.toLowerCase().includes('facebook')
+                      ? post.fb_post_id || null
+                      : post.ig_post_id || null
+                  }
+                  autoFetch={true}
+                />
+
+                {/* Inline Comments Section */}
+                <InlineComments
+                  postId={post.id}
+                  fbPostId={post.fb_post_id || null}
+                  igPostId={post.ig_post_id || null}
+                  platform={post.platform}
+                  autoFetch={true}
+                />
               </div>
             </motion.div>
           ))}
         </div>
-      )}
-      
-      {/* Comments Dialog */}
-      {selectedPost && (
-        <CommentsDialog
-          isOpen={commentsDialogOpen}
-          onClose={() => {
-            setCommentsDialogOpen(false);
-            setSelectedPost(null);
-          }}
-          postId={selectedPost.id}
-          fbPostId={selectedPost.fb_post_id || null}
-          platform={selectedPost.platform}
-        />
       )}
     </div>
   );

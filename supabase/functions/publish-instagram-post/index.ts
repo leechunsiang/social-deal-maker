@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,7 +13,12 @@ serve(async (req) => {
   }
 
   try {
-    const { media_urls, media_url, caption, post_type } = await req.json();
+    const { media_urls, media_url, caption, post_type, post_id } = await req.json();
+
+    // Initialize Supabase client
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const igAccessToken = Deno.env.get("IG_ACCESS_TOKEN");
     const igId = Deno.env.get("IG_ID") || Deno.env.get("VITE_IG_ID");
@@ -87,8 +93,7 @@ serve(async (req) => {
 
       if (data.error) {
         throw new Error(
-          `Container Creation Error (${isCarouselItem ? "Item" : "Single"}): ${
-            data.error.message
+          `Container Creation Error (${isCarouselItem ? "Item" : "Single"}): ${data.error.message
           }`
         );
       }
@@ -196,7 +201,24 @@ serve(async (req) => {
       throw new Error(`Publish Error: ${publishData.error.message}`);
     }
 
-    return new Response(JSON.stringify({ success: true, id: publishData.id }), {
+    console.log("Instagram Publish Success:", publishData);
+    const resultId = publishData.id;
+
+    // Update the scheduled_posts record with the Instagram post ID
+    if (post_id && resultId) {
+      const { error: updateError } = await supabase
+        .from("scheduled_posts")
+        .update({ ig_post_id: resultId })
+        .eq("id", post_id);
+
+      if (updateError) {
+        console.error("Error updating ig_post_id:", updateError);
+      } else {
+        console.log(`Updated post ${post_id} with ig_post_id: ${resultId}`);
+      }
+    }
+
+    return new Response(JSON.stringify({ success: true, id: resultId }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
