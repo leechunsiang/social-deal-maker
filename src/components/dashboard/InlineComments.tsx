@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { MessageCircle, RefreshCw, User, Heart, ChevronDown, ChevronUp } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { MessageCircle, RefreshCw, User, Heart, ChevronDown, ChevronUp, Reply, Send } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -16,6 +17,13 @@ interface Comment {
     fetched_at: string;
 }
 
+interface CommentReply {
+    id: string;
+    fb_reply_id: string;
+    message: string;
+    created_time: string;
+}
+
 interface InlineCommentsProps {
     postId: string;
     fbPostId: string | null;
@@ -26,10 +34,14 @@ interface InlineCommentsProps {
 
 export function InlineComments({ postId, fbPostId, igPostId, platform, autoFetch = true }: InlineCommentsProps) {
     const [comments, setComments] = useState<Comment[]>([]);
+    const [replies, setReplies] = useState<Record<string, CommentReply[]>>({});
     const [loading, setLoading] = useState(true);
     const [fetching, setFetching] = useState(false);
     const [expanded, setExpanded] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [replyingToCommentId, setReplyingToCommentId] = useState<string | null>(null);
+    const [replyText, setReplyText] = useState('');
+    const [submittingReply, setSubmittingReply] = useState(false);
 
     const loadComments = async () => {
         try {
@@ -47,6 +59,21 @@ export function InlineComments({ postId, fbPostId, igPostId, platform, autoFetch
                 setError('Failed to load comments');
             } else {
                 setComments(data || []);
+
+                // Fetch replies for each comment
+                const repliesMap: Record<string, CommentReply[]> = {};
+                for (const comment of data || []) {
+                    const { data: repliesData, error: repliesError } = await supabase
+                        .from('comment_replies')
+                        .select('*')
+                        .eq('comment_id', comment.id)
+                        .order('created_time', { ascending: true });
+
+                    if (!repliesError && repliesData) {
+                        repliesMap[comment.id] = repliesData;
+                    }
+                }
+                setReplies(repliesMap);
             }
         } catch (err) {
             console.error('Error:', err);
@@ -90,6 +117,46 @@ export function InlineComments({ postId, fbPostId, igPostId, platform, autoFetch
             setError('Failed to fetch latest comments');
         } finally {
             setFetching(false);
+        }
+    };
+
+    const handleReplySubmit = async (commentId: string) => {
+        if (!replyText.trim()) {
+            setError('Reply message cannot be empty');
+            return;
+        }
+
+        try {
+            setSubmittingReply(true);
+            setError(null);
+
+            const { data, error: invokeError } = await supabase.functions.invoke(
+                'reply-to-facebook-comment',
+                {
+                    body: {
+                        comment_id: commentId,
+                        reply_message: replyText.trim(),
+                    },
+                }
+            );
+
+            if (invokeError) {
+                console.error('Error submitting reply:', invokeError);
+                setError('Failed to submit reply');
+            } else if (data?.error) {
+                console.error('Edge function error:', data.error);
+                setError(data.error);
+            } else {
+                console.log(`Reply posted successfully: ${data.reply_id}`);
+                setReplyText('');
+                setReplyingToCommentId(null);
+                await fetchLatestComments();
+            }
+        } catch (err) {
+            console.error('Error:', err);
+            setError('Failed to submit reply');
+        } finally {
+            setSubmittingReply(false);
         }
     };
 
@@ -213,6 +280,97 @@ export function InlineComments({ postId, fbPostId, igPostId, platform, autoFetch
                                     <p className="text-xs text-zinc-300 whitespace-pre-wrap pl-9">
                                         {comment.message}
                                     </p>
+
+                                    {/* Reply Button */}
+                                    {platform === 'facebook' && (
+                                        <div className="pl-9 pt-1">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 gap-1 text-[10px] text-zinc-400 hover:text-blue-400 px-2"
+                                                onClick={() => {
+                                                    if (replyingToCommentId === comment.id) {
+                                                        setReplyingToCommentId(null);
+                                                        setReplyText('');
+                                                    } else {
+                                                        setReplyingToCommentId(comment.id);
+                                                        setReplyText('');
+                                                    }
+                                                }}
+                                            >
+                                                <Reply className="w-3 h-3" />
+                                                Reply
+                                            </Button>
+                                        </div>
+                                    )}
+
+                                    {/* Reply Form */}
+                                    {replyingToCommentId === comment.id && (
+                                        <div className="pl-9 space-y-2 border-t border-white/5 pt-2 mt-2">
+                                            <Textarea
+                                                value={replyText}
+                                                onChange={(e) => setReplyText(e.target.value)}
+                                                placeholder="Write your reply..."
+                                                className="min-h-[60px] bg-zinc-800/50 border-white/10 text-white text-xs placeholder:text-zinc-500 resize-none"
+                                                disabled={submittingReply}
+                                            />
+                                            <div className="flex gap-2 justify-end">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-6 text-[10px]"
+                                                    onClick={() => {
+                                                        setReplyingToCommentId(null);
+                                                        setReplyText('');
+                                                    }}
+                                                    disabled={submittingReply}
+                                                >
+                                                    Cancel
+                                                </Button>
+                                                <Button
+                                                    variant="default"
+                                                    size="sm"
+                                                    className="h-6 gap-1 text-[10px] bg-blue-600 hover:bg-blue-700"
+                                                    onClick={() => handleReplySubmit(comment.id)}
+                                                    disabled={submittingReply || !replyText.trim()}
+                                                >
+                                                    {submittingReply ? (
+                                                        <>
+                                                            <RefreshCw className="w-3 h-3 animate-spin" />
+                                                            Sending...
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Send className="w-3 h-3" />
+                                                            Send
+                                                        </>
+                                                    )}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Display Existing Replies */}
+                                    {replies[comment.id] && replies[comment.id].length > 0 && (
+                                        <div className="pl-9 mt-2 space-y-2">
+                                            {replies[comment.id].map((reply) => (
+                                                <div
+                                                    key={reply.id}
+                                                    className="bg-zinc-700/20 border border-white/5 rounded-lg p-2 space-y-1"
+                                                >
+                                                    <div className="flex items-baseline gap-2">
+                                                        <span className="text-[10px] font-semibold text-blue-300">Your reply:</span>
+                                                        <span className="text-[9px] text-zinc-500">
+                                                            {format(new Date(reply.created_time), 'MMM d · h:mm a')}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-xs text-zinc-200 whitespace-pre-wrap">
+                                                        {reply.message}
+                                                    </p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>

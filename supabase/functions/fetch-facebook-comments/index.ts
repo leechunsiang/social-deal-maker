@@ -38,10 +38,11 @@ serve(async (req) => {
 
     console.log(`Fetching comments for Facebook post: ${fb_post_id}`);
 
-    // Fetch comments from Facebook Graph API
+    // Fetch comments from Facebook Graph API with replies
     const params = new URLSearchParams({
       access_token: fbAccessToken,
-      fields: "id,from,message,created_time,like_count",
+      fields:
+        "id,from,message,created_time,like_count,comments{id,from,message,created_time,like_count}",
       limit: "100", // Fetch up to 100 comments
     });
 
@@ -55,6 +56,14 @@ serve(async (req) => {
     }
 
     console.log(`Fetched ${data.data?.length || 0} comments from Facebook`);
+
+    // Debug: Log the first comment to see structure
+    if (data.data && data.data.length > 0) {
+      console.log(
+        "First comment structure:",
+        JSON.stringify(data.data[0], null, 2)
+      );
+    }
 
     // Store comments in database
     const comments = data.data || [];
@@ -83,6 +92,42 @@ serve(async (req) => {
         console.error(`Error inserting comment ${comment.id}:`, insertError);
       } else {
         insertedComments.push(comment.id);
+
+        // Process replies to this comment
+        const replies = comment.comments?.data || [];
+        if (replies.length > 0) {
+          // Get the database comment id
+          const { data: commentData, error: commentError } = await supabase
+            .from("post_comments")
+            .select("id")
+            .eq("fb_comment_id", comment.id)
+            .single();
+
+          if (!commentError && commentData) {
+            for (const reply of replies) {
+              const { error: replyError } = await supabase
+                .from("comment_replies")
+                .upsert(
+                  {
+                    comment_id: commentData.id,
+                    fb_reply_id: reply.id,
+                    message: reply.message || "",
+                    created_time: reply.created_time,
+                  },
+                  {
+                    onConflict: "fb_reply_id",
+                  }
+                );
+
+              if (replyError) {
+                console.error(`Error inserting reply ${reply.id}:`, replyError);
+              }
+            }
+            console.log(
+              `Stored ${replies.length} replies for comment ${comment.id}`
+            );
+          }
+        }
       }
     }
 

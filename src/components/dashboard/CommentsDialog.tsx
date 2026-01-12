@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { MessageCircle, RefreshCw, User, Heart } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { MessageCircle, RefreshCw, User, Heart, Reply, Send } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -30,6 +31,9 @@ export function CommentsDialog({ isOpen, onClose, postId, fbPostId, platform }: 
   const [loading, setLoading] = useState(true);
   const [fetching, setFetching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [replyingToCommentId, setReplyingToCommentId] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const [submittingReply, setSubmittingReply] = useState(false);
 
   const loadComments = async () => {
     try {
@@ -92,6 +96,48 @@ export function CommentsDialog({ isOpen, onClose, postId, fbPostId, platform }: 
       setError('Failed to fetch latest comments');
     } finally {
       setFetching(false);
+    }
+  };
+
+  const handleReplySubmit = async (commentId: string) => {
+    if (!replyText.trim()) {
+      setError('Reply message cannot be empty');
+      return;
+    }
+
+    try {
+      setSubmittingReply(true);
+      setError(null);
+
+      const { data, error: invokeError } = await supabase.functions.invoke(
+        'reply-to-facebook-comment',
+        {
+          body: {
+            comment_id: commentId,
+            reply_message: replyText.trim(),
+          },
+        }
+      );
+
+      if (invokeError) {
+        console.error('Error submitting reply:', invokeError);
+        setError('Failed to submit reply');
+      } else if (data?.error) {
+        console.error('Edge function error:', data.error);
+        setError(data.error);
+      } else {
+        console.log(`Reply posted successfully: ${data.reply_id}`);
+        // Clear reply form
+        setReplyText('');
+        setReplyingToCommentId(null);
+        // Refresh comments to fetch the new reply
+        await fetchLatestComments();
+      }
+    } catch (err) {
+      console.error('Error:', err);
+      setError('Failed to submit reply');
+    } finally {
+      setSubmittingReply(false);
     }
   };
 
@@ -192,11 +238,78 @@ export function CommentsDialog({ isOpen, onClose, postId, fbPostId, platform }: 
                     {comment.message}
                   </p>
 
-                  {/* Like Count */}
-                  {comment.like_count > 0 && (
-                    <div className="flex items-center gap-1 text-zinc-500">
-                      <Heart className="w-3 h-3" />
-                      <span className="text-xs">{comment.like_count}</span>
+                  {/* Like Count & Reply Button */}
+                  <div className="flex items-center justify-between pt-2">
+                    {comment.like_count > 0 && (
+                      <div className="flex items-center gap-1 text-zinc-500">
+                        <Heart className="w-3 h-3" />
+                        <span className="text-xs">{comment.like_count}</span>
+                      </div>
+                    )}
+                    
+                    {platform === 'facebook' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1.5 text-xs text-zinc-400 hover:text-blue-400"
+                        onClick={() => {
+                          if (replyingToCommentId === comment.id) {
+                            setReplyingToCommentId(null);
+                            setReplyText('');
+                          } else {
+                            setReplyingToCommentId(comment.id);
+                            setReplyText('');
+                          }
+                        }}
+                      >
+                        <Reply className="w-3 h-3" />
+                        Reply
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Reply Form */}
+                  {replyingToCommentId === comment.id && (
+                    <div className="mt-3 space-y-2 border-t border-white/5 pt-3">
+                      <Textarea
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        placeholder="Write your reply..."
+                        className="min-h-[80px] bg-zinc-800/50 border-white/10 text-white placeholder:text-zinc-500 resize-none"
+                        disabled={submittingReply}
+                      />
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setReplyingToCommentId(null);
+                            setReplyText('');
+                          }}
+                          disabled={submittingReply}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => handleReplySubmit(comment.id)}
+                          disabled={submittingReply || !replyText.trim()}
+                          className="gap-1.5 bg-blue-600 hover:bg-blue-700"
+                        >
+                          {submittingReply ? (
+                            <>
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                              Sending...
+                            </>
+                          ) : (
+                            <>
+                              <Send className="w-3 h-3" />
+                              Send Reply
+                            </>
+                          )}
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>
