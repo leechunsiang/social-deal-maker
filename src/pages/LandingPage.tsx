@@ -19,6 +19,7 @@ import { SocialTab } from '../components/dashboard/SocialTab';
 import ScheduleTab from '../components/dashboard/ScheduleTab';
 import { VideoTab } from '../components/dashboard/VideoTab';
 import { MyFeedTab } from '../components/dashboard/MyFeedTab';
+import { NotificationBell } from '../components/dashboard/Notifications';
 import { supabase } from '../lib/supabase';
 import type { User } from '@supabase/supabase-js';
 
@@ -188,11 +189,14 @@ export default function LandingPage() {
       {/* Main Content */}
       <main className="flex-1 md:pl-64 flex flex-col min-h-screen pt-16 md:pt-0">
           <div className="flex-1 p-4 md:p-6 flex flex-col">
-              <header className="mb-6">
-                  <h1 className="text-2xl font-bold">{tabs.find(t => t.id === activeTab)?.label}</h1>
-                  <p className="text-zinc-400 text-sm">
-                    {activeTab === 'dashboard' ? 'Overview of your performance.' : `Manage your ${activeTab} activities.`}
-                  </p>
+              <header className="mb-6 flex items-start justify-between">
+                  <div>
+                      <h1 className="text-2xl font-bold">{tabs.find(t => t.id === activeTab)?.label}</h1>
+                      <p className="text-zinc-400 text-sm">
+                        {activeTab === 'dashboard' ? 'Overview of your performance.' : `Manage your ${activeTab} activities.`}
+                      </p>
+                  </div>
+                  <NotificationBell />
               </header>
               
               {activeTab === 'dashboard' && <DashboardTab />}
