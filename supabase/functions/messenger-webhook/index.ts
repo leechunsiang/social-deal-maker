@@ -181,10 +181,13 @@ async function ensureLeadExists(psid: string, supabase: any) {
 
   // Fetch user profile from Facebook
   console.log(`Fetching profile for PSID: ${psid}`);
+
+  // Use FACEBOOK_ACCESS_TOKEN for profile data (requires pages_read_user_content)
+  // Fallback to MESSENGER_ACCESS_TOKEN if not set (legacy behavior)
   const fbAccessToken =
-    Deno.env.get("MESSENGER_ACCESS_TOKEN") ||
+    Deno.env.get("FACEBOOK_ACCESS_TOKEN") ||
     Deno.env.get("FB_ACCESS_TOKEN") ||
-    Deno.env.get("FACEBOOK_ACCESS_TOKEN");
+    Deno.env.get("MESSENGER_ACCESS_TOKEN");
 
   let firstName = "Unknown";
   let lastName = "User";

@@ -61,6 +61,64 @@ export function SocialTab() {
   // Initial Fetch
   useEffect(() => {
     fetchProfiles();
+
+    // Subscribe to profile changes for Messenger
+    let subscription: any = null;
+
+    if (activePlatform === 'messenger') {
+        subscription = supabase
+            .channel('messenger-leads-changes')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*', // Listen to INSERT and UPDATE
+                    schema: 'public',
+                    table: 'messenger_leads'
+                },
+                (payload) => {
+                    if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+                        // Refresh profiles or Optimistically update
+                        // For simplicity, let's just re-fetch or map the single change
+                        const newLead = payload.new as any;
+                        const mappedProfile: InstagramProfile = {
+                            id: newLead.id,
+                            user_id: newLead.psid,
+                            username: `${newLead.first_name} ${newLead.last_name}`.trim(),
+                            name: `${newLead.first_name} ${newLead.last_name}`.trim(),
+                            profile_pic: newLead.profile_pic,
+                            created_at: newLead.created_at,
+                            updated_at: newLead.updated_at
+                        };
+
+                        setProfiles(prev => {
+                            const index = prev.findIndex(p => p.id === mappedProfile.id);
+                            if (index >= 0) {
+                                // Update existing
+                                const copy = [...prev];
+                                copy[index] = mappedProfile;
+                                return copy;
+                            } else {
+                                // Add new
+                                return [mappedProfile, ...prev];
+                            }
+                        });
+                        
+                        // Also update selectedProfile if it matches
+                        setSelectedProfile(current => {
+                            if (current && current.id === mappedProfile.id) {
+                                return mappedProfile;
+                            }
+                            return current;
+                        });
+                    }
+                }
+            )
+            .subscribe();
+    }
+
+    return () => {
+        if (subscription) supabase.removeChannel(subscription);
+    };
   }, [activePlatform]);
 
   // Fetch chat history when selected profile changes
