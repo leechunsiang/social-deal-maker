@@ -57,7 +57,13 @@ serve(async (req) => {
           // Get the webhook event. entry.messaging is an array, but
           // will only contain one event, so we get index 0
           const webhook_event = entry.messaging[0];
-          console.log("Processing event:", webhook_event);
+          console.log("Processing event:", JSON.stringify(webhook_event));
+
+          // Check for Echo (message from Page)
+          if (webhook_event.message && webhook_event.message.is_echo) {
+            console.log("Ignored echo message from page.");
+            continue;
+          }
 
           const sender_psid = webhook_event.sender.id; // Page Scoped ID
 
@@ -151,13 +157,27 @@ async function ensureLeadExists(psid: string, supabase: any) {
   // Check if lead exists
   const { data: existingLead, error: checkError } = await supabase
     .from("messenger_leads")
-    .select("id")
+    .select("id, first_name, last_name")
     .eq("psid", psid)
     .single();
 
-  if (existingLead) {
-    return; // Lead exists
+  let shouldFetchProfile = false;
+  if (!existingLead) {
+    shouldFetchProfile = true;
+  } else if (
+    existingLead.first_name === "Unknown" &&
+    existingLead.last_name === "User"
+  ) {
+    // If defaults were used, try fetching again (e.g. token was fixed)
+    shouldFetchProfile = true;
+    console.log(
+      `Lead exists but matches default 'Unknown User'. Retrying profile fetch for PSID: ${psid}`
+    );
+  } else {
+    return; // Lead exists and has valid data
   }
+
+  if (!shouldFetchProfile) return;
 
   // Fetch user profile from Facebook
   console.log(`Fetching profile for PSID: ${psid}`);
@@ -181,26 +201,50 @@ async function ensureLeadExists(psid: string, supabase: any) {
         lastName = profile.last_name || lastName;
         profilePic = profile.profile_pic || profilePic;
       } else {
-        console.error("Error fetching FB profile:", profile.error);
+        console.error(
+          "Error fetching FB profile:",
+          JSON.stringify(profile.error)
+        );
       }
     } catch (e) {
       console.error("Exception fetching FB profile:", e);
     }
   } else {
-    console.warn("FB_ACCESS_TOKEN not set, cannot fetch user profile.");
+    console.warn("MESSENGER_ACCESS_TOKEN not set, cannot fetch user profile.");
   }
 
-  // Create new lead
-  const { error: insertError } = await supabase.from("messenger_leads").insert({
-    psid: psid,
-    first_name: firstName,
-    last_name: lastName,
-    profile_pic: profilePic,
-  });
+  if (existingLead) {
+    // Update existing 'Unknown' lead
+    const { error: updateError } = await supabase
+      .from("messenger_leads")
+      .update({
+        first_name: firstName,
+        last_name: lastName,
+        profile_pic: profilePic,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existingLead.id);
 
-  if (insertError) {
-    console.error("Error creating new lead:", insertError);
+    if (updateError) {
+      console.error("Error updating lead profile:", updateError);
+    } else {
+      console.log(`Updated profile for PSID: ${psid}`);
+    }
   } else {
-    console.log(`Created new lead for PSID: ${psid}`);
+    // Create new lead
+    const { error: insertError } = await supabase
+      .from("messenger_leads")
+      .insert({
+        psid: psid,
+        first_name: firstName,
+        last_name: lastName,
+        profile_pic: profilePic,
+      });
+
+    if (insertError) {
+      console.error("Error creating new lead:", insertError);
+    } else {
+      console.log(`Created new lead for PSID: ${psid}`);
+    }
   }
 }
