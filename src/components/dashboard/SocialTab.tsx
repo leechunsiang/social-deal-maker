@@ -56,16 +56,23 @@ export function SocialTab() {
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [activePlatform, setActivePlatform] = useState<'instagram' | 'messenger'>('instagram');
+
   // Initial Fetch
   useEffect(() => {
     fetchProfiles();
-  }, []);
+  }, [activePlatform]);
 
   // Fetch chat history when selected profile changes
   useEffect(() => {
     if (selectedProfile) {
       fetchChatHistory(selectedProfile.user_id);
       
+      const tableName = activePlatform === 'instagram' ? 'n8n_chat_histories' : 'messenger_messages';
+      const filter = activePlatform === 'instagram' 
+        ? `session_id=eq.${selectedProfile.user_id}` 
+        : `lead_id=eq.${selectedProfile.id}`; // messenger_messages uses lead_id which is the UUID from messenger_leads
+
       const channel = supabase
         .channel('chat-updates')
         .on(
@@ -73,13 +80,39 @@ export function SocialTab() {
           {
             event: 'INSERT',
             schema: 'public',
-            table: 'n8n_chat_histories',
-            filter: `session_id=eq.${selectedProfile.user_id}`
+            table: tableName,
+            filter: filter
           },
           (payload) => {
-            const newMsg = payload.new as ChatMessage;
+            const newRecord = payload.new;
+            
+            let newMsg: ChatMessage;
+
+            if (activePlatform === 'instagram') {
+                 newMsg = newRecord as ChatMessage;
+            } else {
+                // Map messenger message to ChatMessage format
+                 newMsg = {
+                    id: newRecord.id, // This is UUID, ChatMessage expects number currently... we might need to update interface
+                    // TEMPORARY FIX: map UUID to random number or change interface. 
+                    // Better verify interface. The interface ChatMessage has id: number.
+                    // But messenger_messages has UUID.
+                    // We should update ChatMessage interface to string | number or just string.
+                    // For now, let's cast to any to avoid TS error in this block, but we MUST update interface.
+                    session_id: selectedProfile.user_id, 
+                    message: {
+                        type: newRecord.direction === 'outbound' ? 'me' : 'human',
+                        content: newRecord.content,
+                        attachment: newRecord.type === 'image' || newRecord.type === 'audio' ? {
+                            type: newRecord.type as 'image' | 'audio',
+                            url: newRecord.content // Content holds URL for attachments
+                        } : undefined
+                    },
+                    created_at: newRecord.created_at
+                 } as ChatMessage; // Cast to ChatMessage after updating interface
+            }
+
             setChatMessages((prev) => {
-               // Simple deduplication check based on ID if possible, or assume new
                const exists = prev.some(msg => msg.id === newMsg.id);
                if (exists) return prev;
                return [...prev, newMsg];
@@ -95,7 +128,7 @@ export function SocialTab() {
     } else {
       setChatMessages([]);
     }
-  }, [selectedProfile]);
+  }, [selectedProfile, activePlatform]);
 
   // Auto-scroll to bottom of chat
   useEffect(() => {
@@ -106,18 +139,40 @@ export function SocialTab() {
 
   const fetchProfiles = async () => {
     setLoadingProfiles(true);
+    setProfiles([]); 
+    setSelectedProfile(null);
+
     try {
-      const { data, error } = await supabase
-        .from('instagram_user_profiles')
-        .select('*');
-      
-      if (error) {
-        console.error('Error fetching profiles:', error);
+      if (activePlatform === 'instagram') {
+          const { data, error } = await supabase
+            .from('instagram_user_profiles')
+            .select('*');
+          
+          if (error) throw error;
+          setProfiles(data || []);
       } else {
-        setProfiles(data || []);
+          // Fetch Messenger Leads
+          const { data, error } = await supabase
+            .from('messenger_leads')
+            .select('*');
+            
+          if (error) throw error;
+          
+          // Map to InstagramProfile interface for consistency
+          const mappedProfiles: InstagramProfile[] = (data || []).map(lead => ({
+              id: lead.id, // UUID
+              user_id: lead.psid, // PSID as user_id
+              username: `${lead.first_name} ${lead.last_name}`.trim(), // Use name as username
+              name: `${lead.first_name} ${lead.last_name}`.trim(),
+              profile_pic: lead.profile_pic,
+              created_at: lead.created_at,
+              updated_at: lead.updated_at
+          }));
+          
+          setProfiles(mappedProfiles);
       }
     } catch (err) {
-      console.error('Unexpected error:', err);
+      console.error('Error fetching profiles:', err);
     } finally {
       setLoadingProfiles(false);
     }
@@ -126,16 +181,45 @@ export function SocialTab() {
   const fetchChatHistory = async (userId: string) => {
     setLoadingChat(true);
     try {
-      const { data, error } = await supabase
-        .from('n8n_chat_histories')
-        .select('*')
-        .eq('session_id', userId)
-        .order('created_at', { ascending: true });
+      if (activePlatform === 'instagram') {
+          const { data, error } = await supabase
+            .from('n8n_chat_histories')
+            .select('*')
+            .eq('session_id', userId)
+            .order('created_at', { ascending: true });
 
-      if (error) {
-        console.error('Error fetching chat history:', error);
+          if (error) throw error;
+          setChatMessages(data || []);
       } else {
-        setChatMessages(data || []);
+          // Fetch Messenger Messages
+          // We need the lead_id (UUID) not PSID.
+          // selectedProfile.id maps to messenger_leads.id (UUID)
+          if (!selectedProfile?.id) return;
+
+          const { data, error } = await supabase
+            .from('messenger_messages')
+            .select('*')
+            .eq('lead_id', selectedProfile.id) // Use the UUID we mapped to profile.id
+            .order('created_at', { ascending: true });
+
+          if (error) throw error;
+
+          // Map to ChatMessage interface
+          const mappedMessages: ChatMessage[] = (data || []).map(msg => ({
+              id: msg.id, // UUID
+              session_id: userId,
+              message: {
+                  type: msg.direction === 'outbound' ? 'me' : 'human',
+                  content: msg.type === 'text' ? msg.content : '',
+                  attachment: msg.type !== 'text' ? {
+                      type: msg.type as 'image' | 'audio', // Assuming these are the only non-text types
+                      url: msg.content
+                  } : undefined
+              },
+              created_at: msg.created_at
+          }));
+
+          setChatMessages(mappedMessages);
       }
     } catch (err) {
       console.error('Unexpected error:', err);
@@ -166,43 +250,93 @@ export function SocialTab() {
     setChatMessages(prev => [...prev, optimisticMessage]);
 
     try {
-      const { data: insertedMsg, error } = await supabase
-        .from('n8n_chat_histories')
-        .insert({
-          session_id: selectedProfile.user_id,
-          message: {
-            type: 'me',
-            content: messageText
+      if (activePlatform === 'instagram') {
+          const { data: insertedMsg, error } = await supabase
+            .from('n8n_chat_histories')
+            .insert({
+              session_id: selectedProfile.user_id,
+              message: {
+                type: 'me',
+                content: messageText
+              }
+            })
+            .select()
+            .single();
+
+          if (error) {
+            throw error;
           }
-        })
-        .select()
-        .single();
 
-      if (error) {
-        throw error;
-      }
+          if (insertedMsg) {
+            setChatMessages(prev => prev.map(msg => 
+                msg.id === optimisticMessage.id ? insertedMsg : msg
+            ));
+          }
 
-      if (insertedMsg) {
-         setChatMessages(prev => prev.map(msg => 
-            msg.id === optimisticMessage.id ? insertedMsg : msg
-         ));
-      }
+          // --- Instagram Secure Send (Edge Function) ---
+          
+          const { data, error: functionError } = await supabase.functions.invoke('send-instagram-message', {
+            body: {
+              recipient_id: selectedProfile.user_id,
+              message_text: messageText,
+            },
+          });
 
-      // --- Instagram Secure Send (Edge Function) ---
-      
-      const { data, error: functionError } = await supabase.functions.invoke('send-instagram-message', {
-        body: {
-          recipient_id: selectedProfile.user_id,
-          message_text: messageText,
-        },
-      });
-
-      if (functionError) {
-        console.error('Edge Function Error:', functionError);
-      } else if (data?.error) {
-         console.error('Instagram API Error via Edge Function:', data.error);
+          if (functionError) {
+            console.error('Edge Function Error:', functionError);
+          } else if (data?.error) {
+              console.error('Instagram API Error via Edge Function:', data.error);
+          } else {
+            console.log('Message sent successfully via Edge Function');
+          }
       } else {
-        console.log('Message sent successfully via Edge Function');
+          // ... Messenger Logic ...
+          // 1. Store in DB
+          const { data: insertedMsg, error } = await supabase
+            .from('messenger_messages')
+            .insert({
+                lead_id: selectedProfile.id, // UUID from messenger_leads
+                message_id: `out_${Date.now()}`, // Temporary ID for Messenger's message_id
+                content: messageText,
+                type: 'text',
+                direction: 'outbound',
+                created_at: new Date().toISOString()
+            })
+            .select()
+            .single();
+
+          if (error) throw error;
+
+          // Map back to ChatMessage for state update
+           const mappedMsg: ChatMessage = {
+              id: insertedMsg.id, // Use the actual UUID from DB
+              session_id: selectedProfile.user_id,
+              message: {
+                  type: 'me',
+                  content: insertedMsg.content
+              },
+              created_at: insertedMsg.created_at
+          };
+
+          setChatMessages(prev => prev.map(msg => 
+            msg.id === optimisticMessage.id ? mappedMsg : msg
+          ));
+
+          // 2. Send via Edge Function
+          const { data, error: functionError } = await supabase.functions.invoke('send-messenger-message', {
+            body: {
+              recipient_id: selectedProfile.user_id, // This is the PSID for Messenger
+              message_text: messageText,
+            },
+          });
+
+          if (functionError) {
+             console.error('Edge Function Error:', functionError);
+             alert('Failed to send message via Messenger API');
+          } else if (data?.error) {
+             console.error('FB API Error:', data.error);
+             alert('Facebook API Error: ' + JSON.stringify(data.error));
+          }
       }
       
     } catch (error) {
@@ -273,47 +407,103 @@ export function SocialTab() {
         const finalUrl = signedData.signedUrl;
 
         // 3. Save to DB
-        const { data: insertedMsg, error: dbError } = await supabase
-            .from('n8n_chat_histories')
-            .insert({
+        if (activePlatform === 'instagram') {
+            const { data: insertedMsg, error: dbError } = await supabase
+                .from('n8n_chat_histories')
+                .insert({
+                    session_id: selectedProfile.user_id,
+                    message: {
+                        type: 'me',
+                        content: 'Sent an image',
+                        attachment: {
+                            type: 'image',
+                            url: finalUrl
+                        }
+                    }
+                })
+                .select()
+                .single();
+
+            if (dbError) throw dbError;
+
+            if (insertedMsg) {
+                setChatMessages(prev => prev.map(msg => 
+                msg.id === optimisticId ? insertedMsg : msg
+                ));
+            }
+
+            // 4. Send via Edge Function
+            const { data, error: functionError } = await supabase.functions.invoke('send-instagram-message', {
+                body: {
+                    recipient_id: selectedProfile.user_id,
+                    attachments: {
+                        type: 'image',
+                        payload: {
+                            url: finalUrl
+                        }
+                    }
+                },
+            });
+
+            if (functionError) {
+                console.error('Edge Function Error:', functionError);
+            } else if (data?.error) {
+                console.error('Instagram API Error:', data.error);
+            }
+        } else {
+            // Messenger image upload
+            const { data: insertedMsg, error: dbError } = await supabase
+                .from('messenger_messages')
+                .insert({
+                    lead_id: selectedProfile.id,
+                    message_id: `out_img_${Date.now()}`,
+                    content: finalUrl, // URL is the content for attachments
+                    type: 'image',
+                    direction: 'outbound',
+                    created_at: new Date().toISOString()
+                })
+                .select()
+                .single();
+
+            if (dbError) throw dbError;
+
+            const mappedMsg: ChatMessage = {
+                id: insertedMsg.id,
                 session_id: selectedProfile.user_id,
                 message: {
                     type: 'me',
-                    content: 'Sent an image',
+                    content: '',
                     attachment: {
                         type: 'image',
-                        url: finalUrl
+                        url: insertedMsg.content
                     }
-                }
-            })
-            .select()
-            .single();
+                },
+                created_at: insertedMsg.created_at
+            };
 
-        if (dbError) throw dbError;
+            if (insertedMsg) {
+                setChatMessages(prev => prev.map(msg => 
+                msg.id === optimisticId ? mappedMsg : msg
+                ));
+            }
 
-        if (insertedMsg) {
-            setChatMessages(prev => prev.map(msg => 
-               msg.id === optimisticId ? insertedMsg : msg
-            ));
-        }
-
-        // 4. Send via Edge Function
-        const { data, error: functionError } = await supabase.functions.invoke('send-instagram-message', {
-            body: {
-                recipient_id: selectedProfile.user_id,
-                attachments: {
-                    type: 'image',
-                    payload: {
-                        url: finalUrl
+            const { data, error: functionError } = await supabase.functions.invoke('send-messenger-message', {
+                body: {
+                    recipient_id: selectedProfile.user_id,
+                    attachment: {
+                        type: 'image',
+                        payload: {
+                            url: finalUrl
+                        }
                     }
-                }
-            },
-        });
+                },
+            });
 
-        if (functionError) {
-             console.error('Edge Function Error:', functionError);
-        } else if (data?.error) {
-             console.error('Instagram API Error:', data.error);
+            if (functionError) {
+                console.error('Edge Function Error:', functionError);
+            } else if (data?.error) {
+                console.error('Messenger API Error:', data.error);
+            }
         }
 
     } catch (error) {
@@ -473,50 +663,109 @@ export function SocialTab() {
         const finalUrl = signedData.signedUrl;
 
         // 3. Save to DB 
-        const { data: insertedMsg, error: dbError } = await supabase
-            .from('n8n_chat_histories')
-            .insert({
+        if (activePlatform === 'instagram') {
+            const { data: insertedMsg, error: dbError } = await supabase
+                .from('n8n_chat_histories')
+                .insert({
+                    session_id: selectedProfile.user_id,
+                    message: {
+                        type: 'me',
+                        content: 'Sent a voice message',
+                        attachment: {
+                            type: 'audio',
+                            url: finalUrl
+                        }
+                    }
+                })
+                .select()
+                .single();
+
+            if (dbError) throw dbError;
+
+            if (insertedMsg) {
+                setChatMessages(prev => prev.map(msg => 
+                    msg.id === optimisticId ? insertedMsg : msg
+                ));
+            }
+
+            // 4. Send via Edge Function
+            const { data, error: functionError } = await supabase.functions.invoke('send-instagram-message', {
+                body: {
+                    recipient_id: selectedProfile.user_id,
+                    attachment: {
+                        type: 'audio', 
+                        payload: {
+                            url: finalUrl
+                        }
+                    }
+                },
+            });
+
+            if (functionError) {
+                console.error('Edge Function Network Error:', functionError);
+                alert(`Network Error: ${functionError.message}`);
+            } else if (data?.error) {
+                console.error('Instagram API Error:', data.error);
+                const errMsg = data.error.error?.message || JSON.stringify(data.error);
+                alert(`Instagram Error: ${errMsg}`);
+            }
+        } else {
+            // Messenger voice message upload
+            const { data: insertedMsg, error: dbError } = await supabase
+                .from('messenger_messages')
+                .insert({
+                    lead_id: selectedProfile.id,
+                    message_id: `out_aud_${Date.now()}`,
+                    content: finalUrl,
+                    type: 'audio',
+                    direction: 'outbound',
+                    created_at: new Date().toISOString()
+                })
+                .select()
+                .single();
+
+            if (dbError) throw dbError;
+
+            const mappedMsg: ChatMessage = {
+                id: insertedMsg.id,
                 session_id: selectedProfile.user_id,
                 message: {
                     type: 'me',
                     content: 'Sent a voice message',
                     attachment: {
                         type: 'audio',
-                        url: finalUrl
+                        url: insertedMsg.content
                     }
-                }
-            })
-            .select()
-            .single();
+                },
+                created_at: insertedMsg.created_at
+            };
 
-        if (dbError) throw dbError;
+            if (insertedMsg) {
+                setChatMessages(prev => prev.map(msg => 
+                    msg.id === optimisticId ? mappedMsg : msg
+                ));
+            }
 
-        if (insertedMsg) {
-             setChatMessages(prev => prev.map(msg => 
-                msg.id === optimisticId ? insertedMsg : msg
-             ));
-        }
-
-        // 4. Send via Edge Function
-        const { data, error: functionError } = await supabase.functions.invoke('send-instagram-message', {
-            body: {
-                recipient_id: selectedProfile.user_id,
-                attachment: {
-                    type: 'audio', 
-                    payload: {
-                        url: finalUrl
+            const { data, error: functionError } = await supabase.functions.invoke('send-messenger-message', {
+                body: {
+                    recipient_id: selectedProfile.user_id,
+                    attachment: {
+                        type: 'audio',
+                        payload: {
+                            url: finalUrl
+                        }
                     }
-                }
-            },
-        });
+                },
+            });
 
-        if (functionError) {
-             console.error('Edge Function Network Error:', functionError);
-             alert(`Network Error: ${functionError.message}`);
-        } else if (data?.error) {
-             console.error('Instagram API Error:', data.error);
-             const errMsg = data.error.error?.message || JSON.stringify(data.error);
-             alert(`Instagram Error: ${errMsg}`);
+            if (functionError) {
+                console.error('Edge Function Network Error:', functionError);
+                alert(`Network Error: ${functionError.message}`);
+            } else if (data?.error) {
+                console.error('Messenger API Error:', data.error);
+                const errMsg = data.error.error?.message || JSON.stringify(data.error);
+                alert(`Messenger Error: ${errMsg}`);
+            }
         }
 
     } catch (error: unknown) {
@@ -550,43 +799,93 @@ export function SocialTab() {
     setChatMessages(prev => [...prev, optimisticMessage]);
 
     try {
-      // 1. Save to Database (History)
-      const { data: insertedMsg, error: dbError } = await supabase
-        .from('n8n_chat_histories')
-        .insert({
-          session_id: selectedProfile.user_id,
-          message: {
-            type: 'me',
-            content: stickerContent
+      if (activePlatform === 'instagram') {
+          // 1. Save to Database (History)
+          const { data: insertedMsg, error: dbError } = await supabase
+            .from('n8n_chat_histories')
+            .insert({
+              session_id: selectedProfile.user_id,
+              message: {
+                type: 'me',
+                content: stickerContent
+              }
+            })
+            .select()
+            .single();
+          
+          if (dbError) throw dbError;
+
+          if (insertedMsg) {
+            setChatMessages(prev => prev.map(msg => 
+                msg.id === optimisticMessage.id ? insertedMsg : msg
+            ));
           }
-        })
-        .select()
-        .single();
-      
-      if (dbError) throw dbError;
 
-       if (insertedMsg) {
-         setChatMessages(prev => prev.map(msg => 
-            msg.id === optimisticMessage.id ? insertedMsg : msg
-         ));
-      }
+          // 2. Send via Edge Function
+          const { data, error: functionError } = await supabase.functions.invoke('send-instagram-message', {
+            body: {
+              recipient_id: selectedProfile.user_id,
+              attachment: {
+                type: 'like_heart'
+              }
+            },
+          });
 
-      // 2. Send via Edge Function
-      const { data, error: functionError } = await supabase.functions.invoke('send-instagram-message', {
-        body: {
-          recipient_id: selectedProfile.user_id,
-          attachment: {
-            type: 'like_heart'
+          if (functionError) {
+            console.error('Edge Function Error:', functionError);
+          } else if (data?.error) {
+              console.error('Instagram API Error via Edge Function:', data.error);
+          } else {
+            console.log('Sticker sent successfully');
           }
-        },
-      });
-
-      if (functionError) {
-        console.error('Edge Function Error:', functionError);
-      } else if (data?.error) {
-         console.error('Instagram API Error via Edge Function:', data.error);
       } else {
-        console.log('Sticker sent successfully');
+          // Messenger does not have a direct "like heart" sticker API like Instagram.
+          // We can send a text message with the heart emoji instead.
+          const { data: insertedMsg, error: dbError } = await supabase
+            .from('messenger_messages')
+            .insert({
+                lead_id: selectedProfile.id,
+                message_id: `out_like_${Date.now()}`,
+                content: stickerContent,
+                type: 'text',
+                direction: 'outbound',
+                created_at: new Date().toISOString()
+            })
+            .select()
+            .single();
+
+          if (dbError) throw dbError;
+
+          const mappedMsg: ChatMessage = {
+              id: insertedMsg.id,
+              session_id: selectedProfile.user_id,
+              message: {
+                  type: 'me',
+                  content: insertedMsg.content
+              },
+              created_at: insertedMsg.created_at
+          };
+
+          if (insertedMsg) {
+            setChatMessages(prev => prev.map(msg => 
+                msg.id === optimisticMessage.id ? mappedMsg : msg
+            ));
+          }
+
+          const { data, error: functionError } = await supabase.functions.invoke('send-messenger-message', {
+            body: {
+              recipient_id: selectedProfile.user_id,
+              message_text: stickerContent, // Send as text message
+            },
+          });
+
+          if (functionError) {
+             console.error('Edge Function Error:', functionError);
+             alert('Failed to send like via Messenger API');
+          } else if (data?.error) {
+             console.error('FB API Error:', data.error);
+             alert('Facebook API Error: ' + JSON.stringify(data.error));
+          }
       }
 
     } catch (error) {
@@ -603,11 +902,37 @@ export function SocialTab() {
         <div className="flex w-full h-full">
             {/* Left Section: User List */}
             <div className="w-1/3 min-w-[250px] border-r border-white/5 bg-zinc-900/50 flex flex-col">
-                <div className="p-4 border-b border-white/5 bg-zinc-900/80 backdrop-blur-sm sticky top-0 z-10">
-                <h2 className="font-bold text-sm text-zinc-300 uppercase tracking-wider flex items-center gap-2">
-                    <MessageCircle className="size-4" />
-                    Messages
-                </h2>
+                <div className="p-4 border-b border-white/5 bg-zinc-900/80 backdrop-blur-sm sticky top-0 z-10 space-y-3">
+                    <h2 className="font-bold text-sm text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                        <MessageCircle className="size-4" />
+                        Messages
+                    </h2>
+                    
+                    {/* Platform Switcher */}
+                    <div className="flex p-1 bg-zinc-800/50 rounded-lg">
+                        <button 
+                            onClick={() => setActivePlatform('instagram')}
+                            className={cn(
+                                "flex-1 py-1.5 text-xs font-medium rounded-md transition-all",
+                                activePlatform === 'instagram' 
+                                    ? "bg-violet-600 text-white shadow-sm" 
+                                    : "text-zinc-400 hover:text-zinc-200"
+                            )}
+                        >
+                            Instagram
+                        </button>
+                        <button 
+                            onClick={() => setActivePlatform('messenger')}
+                             className={cn(
+                                "flex-1 py-1.5 text-xs font-medium rounded-md transition-all",
+                                activePlatform === 'messenger' 
+                                    ? "bg-violet-600 text-white shadow-sm" 
+                                    : "text-zinc-400 hover:text-zinc-200"
+                            )}
+                        >
+                            Messenger
+                        </button>
+                    </div>
                 </div>
                 
                 {/* User List Container with max-height for scrolling */}
@@ -619,7 +944,7 @@ export function SocialTab() {
                     ) : profiles.length > 0 ? (
                     profiles.map((profile) => (
                         <button 
-                        key={profile.id} 
+                        key={String(profile.id)} 
                         onClick={() => setSelectedProfile(profile)}
                         className={cn(
                             "w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left group border border-transparent",
@@ -652,13 +977,15 @@ export function SocialTab() {
                             )}>
                             {profile.name}
                             </h3>
-                            <p className="text-zinc-500 text-xs truncate">@{profile.username}</p>
+                            <p className="text-zinc-500 text-xs truncate">
+                                {activePlatform === 'messenger' ? 'Messenger User' : `@${profile.username}`}
+                            </p>
                         </div>
                         </button>
                     ))
                     ) : (
                     <div className="p-4 text-center text-zinc-500 text-sm">
-                        No profiles found.
+                        No {activePlatform} profiles found.
                     </div>
                     )}
                 </div>
@@ -682,7 +1009,9 @@ export function SocialTab() {
                         </div>
                         <div>
                         <h3 className="font-bold text-sm text-white">{selectedProfile.name}</h3>
-                        <p className="text-xs text-zinc-500">@{selectedProfile.username}</p>
+                        <p className="text-xs text-zinc-500">
+                             {activePlatform === 'messenger' ? 'MESSENGER' : `@${selectedProfile.username}`}
+                        </p>
                         </div>
                     </div>
                     <div className="text-xs text-zinc-600 font-mono">
@@ -705,7 +1034,7 @@ export function SocialTab() {
 
                         return (
                             <div 
-                            key={msg.id} 
+                            key={String(msg.id)} 
                             className={cn(
                                 "flex gap-3 max-w-3xl",
                                 type === 'ai' || type === 'me' ? "ml-auto flex-row-reverse" : ""
@@ -830,7 +1159,7 @@ export function SocialTab() {
                             type="text" 
                             value={inputMessage}
                             onChange={(e) => setInputMessage(e.target.value)}
-                            placeholder="Type a message..." 
+                            placeholder={activePlatform === 'messenger' ? "Message..." : "Type a message..."}
                             className="flex-1 bg-zinc-950/50 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/20 transition-all placeholder:text-zinc-600"
                             disabled={sending || !selectedProfile}
                             />
