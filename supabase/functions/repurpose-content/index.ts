@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import mammoth from "https://esm.sh/mammoth@1.6.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -83,7 +84,13 @@ serve(async (req) => {
   }
 
   try {
-    const { content, generatedImagePath, outputFormat } = await req.json();
+    const {
+      content,
+      generatedImagePath,
+      outputFormat,
+      uploadedFilePath,
+      fileType,
+    } = await req.json();
 
     if (
       !outputFormat ||
@@ -121,29 +128,61 @@ serve(async (req) => {
     let sourceType = "paste"; // default
     let originalContent = content || "";
 
-    // If generatedImagePath is provided, use Vision API to extract content from the image
-    if (generatedImagePath) {
-      sourceType = "generated_image";
+    let uploadedImageBlob: Blob | null = null;
 
-      // Download image from Supabase Storage
-      const { data: imageBlob, error: downloadError } = await supabase.storage
-        .from("generated_images")
-        .download(generatedImagePath);
+    // Logic for uploadedFilePath
+    if (uploadedFilePath) {
+      sourceType = "upload";
 
-      if (downloadError || !imageBlob) {
+      const { data: fileBlob, error: downloadError } = await supabase.storage
+        .from("repurpose_uploads")
+        .download(uploadedFilePath);
+
+      if (downloadError || !fileBlob) {
         throw new Error(
-          `Failed to download image: ${
+          `Failed to download file: ${
             downloadError?.message || "Unknown error"
           }`
         );
       }
 
-      // Convert Blob to ArrayBuffer then to Base64
-      const arrayBuffer = await imageBlob.arrayBuffer();
-      const base64Image = encode(arrayBuffer);
-      const mimeType = imageBlob.type || "image/png"; // Default to png if unknown
+      if (fileType === "text") {
+        contentToRepurpose = await fileBlob.text();
+        originalContent = contentToRepurpose;
+      } else if (fileType === "docx") {
+        const arrayBuffer = await fileBlob.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        contentToRepurpose = result.value;
+        originalContent = contentToRepurpose;
 
-      // Use OpenAI Vision API to analyze the image
+        if (!contentToRepurpose || contentToRepurpose.trim().length === 0) {
+          throw new Error(
+            "Could not extract text from DOCX file. Please check if the file is valid."
+          );
+        }
+      } else if (fileType === "image") {
+        uploadedImageBlob = fileBlob;
+      }
+    } else if (generatedImagePath) {
+      sourceType = "generated_image";
+      const { data: imgBlob, error: downloadError } = await supabase.storage
+        .from("generated_images")
+        .download(generatedImagePath);
+
+      if (downloadError || !imgBlob) {
+        throw new Error(
+          `Failed to download generated image: ${downloadError?.message}`
+        );
+      }
+      uploadedImageBlob = imgBlob;
+    }
+
+    // Process image if we have one (from upload or generation)
+    if (uploadedImageBlob) {
+      const arrayBuffer = await uploadedImageBlob.arrayBuffer();
+      const base64Image = encode(arrayBuffer);
+      const mimeType = uploadedImageBlob.type || "image/png";
+
       const visionResponse = await fetch(
         "https://api.openai.com/v1/chat/completions",
         {
@@ -182,7 +221,7 @@ serve(async (req) => {
       }
 
       contentToRepurpose = visionData.choices[0].message.content;
-      originalContent = contentToRepurpose; // Save the extracted content as original
+      originalContent = contentToRepurpose;
     }
 
     if (!contentToRepurpose || contentToRepurpose.trim() === "") {

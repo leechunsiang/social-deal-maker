@@ -4,11 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Loader2, Upload, X, Plus, Image as ImageIcon, Clapperboard, Timer, CheckCircle2 } from 'lucide-react';
+import { Loader2, Upload, X, Plus, Image as ImageIcon, Clapperboard, Timer, CheckCircle2, Sparkles } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { format, isSameDay } from 'date-fns';
 import { TimePicker } from './TimePicker';
 import { cn } from '@/lib/utils';
+import { RepurposedContentSelector } from './RepurposedContentSelector';
 
 interface SchedulePostDialogProps {
   isOpen: boolean;
@@ -26,6 +27,7 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
   const [caption, setCaption] = useState('');
+  const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   
   // State changes for features
   const [selectedPostTypes, setSelectedPostTypes] = useState<string[]>(['POST']);
@@ -97,33 +99,56 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
     });
   };
 
+  const handleRepurposedSelect = async (content: string, imageUrl?: string | null) => {
+      setCaption(content);
+      
+      if (imageUrl) {
+          try {
+              // Fetch the image and convert to File
+              const response = await fetch(imageUrl);
+              const blob = await response.blob();
+              const fileName = `repurposed-image-${Date.now()}.png`;
+              const file = new File([blob], fileName, { type: blob.type });
+              
+              addFiles([file]);
+          } catch (err) {
+              console.error("Failed to load repurposed image:", err);
+          }
+      }
+  };
+
   const handleSave = async () => {
-    if (!selectedDate || mediaFiles.length === 0 || selectedPostTypes.length === 0 || selectedPlatforms.length === 0) return;
+    if (!selectedDate || (mediaFiles.length === 0 && caption.length === 0) || selectedPostTypes.length === 0 || selectedPlatforms.length === 0) return;
 
     setIsSubmitting(true);
     try {
-      // 1. Upload All Media
-      const uploadPromises = mediaFiles.map(async (file) => {
-          const fileExt = file.name.split('.').pop();
-          const fileName = `${Math.random()}.${fileExt}`;
-          const filePath = `${fileName}`;
-          
-          const { error: uploadError } = await supabase.storage
-            .from('posts')
-            .upload(filePath, file);
-
-          if (uploadError) {
-              console.error('Upload Error:', uploadError);
-              // Fallback for demo if missing bucket
-              return URL.createObjectURL(file);
-          } else {
-              const { data: urlData } = supabase.storage.from('posts').getPublicUrl(filePath);
-              return urlData.publicUrl;
-          }
-      });
-
-      const uploadedUrls = await Promise.all(uploadPromises);
-      const mainMediaUrl = uploadedUrls[0]; // Use first image as thumbnail
+      // 1. Upload All Media (if any)
+      let uploadedUrls: string[] = [];
+      let mainMediaUrl: string | null = null;
+      
+      if (mediaFiles.length > 0) {
+          const uploadPromises = mediaFiles.map(async (file) => {
+              const fileExt = file.name.split('.').pop();
+              const fileName = `${Math.random()}.${fileExt}`;
+              const filePath = `${fileName}`;
+              
+              const { error: uploadError } = await supabase.storage
+                .from('posts')
+                .upload(filePath, file);
+    
+              if (uploadError) {
+                  console.error('Upload Error:', uploadError);
+                  // Fallback for demo if missing bucket
+                  return URL.createObjectURL(file);
+              } else {
+                  const { data: urlData } = supabase.storage.from('posts').getPublicUrl(filePath);
+                  return urlData.publicUrl;
+              }
+          });
+    
+          uploadedUrls = await Promise.all(uploadPromises);
+          mainMediaUrl = uploadedUrls[0]; // Use first image as thumbnail
+      }
 
       // 2. Insert into Database (Loop through selected types & platforms)
       const { data: { user } } = await supabase.auth.getUser();
@@ -223,7 +248,12 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
     }
   };
 
+  const isInstagramSelected = selectedPlatforms.includes('instagram');
+  const hasMedia = mediaFiles.length > 0;
+  const validationError = isInstagramSelected && !hasMedia ? "Instagram posts require an image or video." : null;
+
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="bg-zinc-950 border-zinc-800 text-white sm:max-w-[480px] p-0 overflow-hidden flex flex-col max-h-[90vh]">
         <DialogHeader className="px-6 py-4 border-b border-zinc-800 bg-zinc-950 sticky top-0 z-10">
@@ -381,7 +411,18 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
 
           {/* Caption */}
           <div className="space-y-3">
-            <Label htmlFor="caption" className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Caption</Label>
+            <div className="flex items-center justify-between">
+                <Label htmlFor="caption" className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Caption</Label>
+                <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setIsSelectorOpen(true)}
+                    className="h-6 text-[10px] text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 px-2"
+                >
+                    <Sparkles className="w-3 h-3 mr-1" />
+                    Auto-fill from Repurposed
+                </Button>
+            </div>
             <div className="relative">
                 <Textarea 
                     id="caption" 
@@ -433,18 +474,35 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
 
         </div>
 
-        <DialogFooter className="px-6 py-4 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-sm sticky bottom-0 z-10">
-          <Button variant="ghost" onClick={onClose} disabled={isSubmitting} className="hover:bg-zinc-900 hover:text-white">Cancel</Button>
-          <Button 
+        <DialogFooter className="px-6 py-4 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-sm sticky bottom-0 z-10 flex-col gap-2">
+            {validationError && (
+                <div className="w-full text-center p-2 rounded-md bg-red-500/10 border border-red-500/20 mb-1">
+                    <p className="text-xs text-red-500 font-medium flex items-center justify-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                        {validationError}
+                    </p>
+                </div>
+            )}
+          <div className="flex w-full justify-end gap-2">
+           <Button variant="ghost" onClick={onClose} disabled={isSubmitting} className="hover:bg-zinc-900 hover:text-white">Cancel</Button>
+           <Button 
             onClick={handleSave} 
-            disabled={isSubmitting || mediaFiles.length === 0 || selectedPostTypes.length === 0}
+            disabled={isSubmitting || (mediaFiles.length === 0 && caption.length === 0) || selectedPostTypes.length === 0 || !!validationError}
             className="bg-white text-black hover:bg-zinc-200"
           >
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {postNow ? 'Post Now' : 'Schedule Post'}
           </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <RepurposedContentSelector 
+        isOpen={isSelectorOpen} 
+        onClose={() => setIsSelectorOpen(false)} 
+        onSelect={handleRepurposedSelect}
+    />
+    </>
   );
 }

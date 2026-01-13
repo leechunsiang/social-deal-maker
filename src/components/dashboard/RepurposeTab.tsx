@@ -216,6 +216,8 @@ export function RepurposeTab() {
         outputFormat: OutputFormat;
         content?: string;
         generatedImagePath?: string;
+        uploadedFilePath?: string;
+        fileType?: 'text' | 'image' | 'docx';
       } = {
         outputFormat: selectedFormat,
       };
@@ -235,13 +237,29 @@ export function RepurposeTab() {
           throw new Error('Please upload a file');
         }
         
-        // For uploaded files, read content first
-        if (uploadedFile.type.startsWith('text/')) {
-          requestBody.content = textContent;
+        // Upload file to Supabase Storage
+        const fileExt = uploadedFile.name.split('.').pop();
+        const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `${user.id}/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('repurpose_uploads')
+          .upload(filePath, uploadedFile);
+
+        if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
+
+        requestBody.uploadedFilePath = filePath;
+        
+        // Determine file type
+        if (uploadedFile.type.startsWith('image/')) {
+          requestBody.fileType = 'image';
+        } else if (uploadedFile.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || uploadedFile.name.endsWith('.docx')) {
+           requestBody.fileType = 'docx';
+        } else if (uploadedFile.type.startsWith('text/') || uploadedFile.name.endsWith('.md')) {
+          requestBody.fileType = 'text';
         } else {
-          // For images, PDFs, etc., we'll need to upload to storage first
-          // For now, show error
-          throw new Error('Only text files are supported in this version. PDF and image support coming soon!');
+          // Default to text if we can read it, or handle PDF later
+           requestBody.fileType = 'text';
         }
       }
 
