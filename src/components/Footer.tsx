@@ -3,8 +3,8 @@ import { Sparkles } from 'lucide-react';
 
 export function Footer() {
   return (
-    <footer className="border-t border-white/10 bg-zinc-950 py-12 md:py-20">
-      <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-12 text-sm">
+    <footer className="border-t border-white/10 bg-zinc-950 py-8 md:py-10">
+      <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-8 text-sm">
          <div className="space-y-4">
            <div className="flex items-center gap-2">
              <Sparkles className="size-5 text-violet-500" />
@@ -46,7 +46,7 @@ export function Footer() {
            </form>
          </div>
       </div>
-      <div className="max-w-7xl mx-auto px-6 mt-12 pt-8 border-t border-white/5 text-center text-zinc-600 text-xs">
+      <div className="max-w-7xl mx-auto px-6 mt-8 pt-6 border-t border-white/5 text-center text-zinc-600 text-xs">
         © {new Date().getFullYear()} SocialNexus Inc. All rights reserved.
       </div>
     </footer>
