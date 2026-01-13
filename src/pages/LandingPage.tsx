@@ -61,10 +61,10 @@ export default function LandingPage() {
     <div className="flex min-h-screen bg-zinc-950 text-white font-sans selection:bg-violet-500/30">
       {/* Sidebar for Desktop */}
       <aside className="hidden md:flex flex-col w-64 bg-zinc-900/50 border-r border-white/5 fixed top-0 bottom-0 left-0 z-40 backdrop-blur-xl">
-        <div className="p-6 border-b border-white/5">
-             <div className="flex items-center gap-2">
-                 <img src="/kadoshAI-removebg.png" alt="KadoshAI Logo" className="h-8 w-auto" />
-                 <span className="font-bold text-lg tracking-tight">Social Deal Maker</span>
+<div className="p-6 border-b border-zinc-200 bg-white shadow-sm">
+             <div className="flex flex-col items-center gap-3 text-center">
+                 <img src="/kadoshAI-removebg.png" alt="KadoshAI Logo" className="h-12 w-auto" />
+                 <span className="font-bold text-lg tracking-tight text-zinc-950">Social Deal Maker</span>
              </div>
         </div>
         <nav className="flex-1 p-4 space-y-2">

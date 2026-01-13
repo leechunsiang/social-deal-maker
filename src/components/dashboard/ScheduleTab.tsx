@@ -3,8 +3,8 @@ import { supabase } from '../../lib/supabase';
 
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, Plus, Facebook, Instagram, Linkedin, Twitter } from 'lucide-react';
-import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, startOfWeek, endOfWeek } from 'date-fns';
+import { ChevronLeft, ChevronRight, Plus, Facebook, Instagram, Linkedin, Twitter, Clock } from 'lucide-react';
+import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays, subDays } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { DayDetailsDialog } from './DayDetailsDialog';
 import { SchedulePostDialog } from './SchedulePostDialog';
@@ -62,7 +62,7 @@ export default function ScheduleTab() {
 
        const onDateClick = (d: Date) => {
           setSelectedDate(d);
-          if (date && !isSameMonth(d, date)) {
+          if (view === 'month' && date && !isSameMonth(d, date)) {
               setDate(d);
           }
        };
@@ -73,13 +73,34 @@ export default function ScheduleTab() {
        };
 
     
-  // Month Navigation
-  const handlePrevMonth = () => {
-    if (date) setDate(subMonths(date, 1));
+  // Navigation
+  const handlePrev = () => {
+    if (!date) return;
+    if (view === 'month') setDate(subMonths(date, 1));
+    if (view === 'week') setDate(subWeeks(date, 1));
+    if (view === 'day') setDate(subDays(date, 1));
   };
 
-  const handleNextMonth = () => {
-    if (date) setDate(addMonths(date, 1));
+  const handleNext = () => {
+    if (!date) return;
+    if (view === 'month') setDate(addMonths(date, 1));
+    if (view === 'week') setDate(addWeeks(date, 1));
+    if (view === 'day') setDate(addDays(date, 1));
+  };
+
+  // Label
+  const getDateLabel = () => {
+      if (!date) return 'Select Date';
+      if (view === 'month') return format(date, 'MMMM yyyy');
+      if (view === 'week') {
+          const start = startOfWeek(date);
+          const end = endOfWeek(date);
+          // If same month
+          if (isSameMonth(start, end)) return format(date, 'MMMM yyyy');
+          return `${format(start, 'MMM')} - ${format(end, 'MMM yyyy')}`;
+      }
+      if (view === 'day') return format(date, 'MMMM d, yyyy');
+      return '';
   };
 
   const fetchPosts = async () => {
@@ -97,7 +118,7 @@ export default function ScheduleTab() {
   // Fetch posts on mount and when date changes (could be optimized)
   useEffect(() => {
     fetchPosts();
-  }, [date]);
+  }, [date, view]); // simple refresh
 
   // Callback to refresh posts after dialog closes
   const handleDialogClose = () => {
@@ -116,9 +137,9 @@ export default function ScheduleTab() {
       <div className="flex flex-col md:flex-row items-center justify-between p-4 border-b border-white/5 gap-4 bg-zinc-900/50 backdrop-blur-sm">
          <div className="flex items-center gap-4">
              {/* Date Display */}
-             <div className="flex flex-col">
+             <div className="flex flex-col min-w-[200px]">
                  <h2 className="text-2xl font-bold text-white tracking-tight">
-                     {date ? format(date, 'MMMM yyyy') : 'Select Date'}
+                     {getDateLabel()}
                  </h2>
                  <p className="text-xs text-zinc-500 font-medium">
                     {selectedDate ? format(selectedDate, 'MMM d, yyyy') : 'No date selected'}
@@ -127,13 +148,15 @@ export default function ScheduleTab() {
              
              {/* Navigation */}
              <div className="flex items-center bg-zinc-800 rounded-lg p-0.5 border border-white/10">
-                 <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md hover:bg-zinc-700 hover:text-white" onClick={handlePrevMonth}>
+                 <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md hover:bg-zinc-700 hover:text-white" onClick={handlePrev}>
                      <ChevronLeft className="h-4 w-4" />
                  </Button>
                  <span className="text-xs font-mono px-2 text-zinc-400 min-w-[140px] text-center">
-                    {date && format(startOfWeek(date), 'MMM d')} - {date && format(endOfWeek(date), 'MMM d, yyyy')}
+                    {view === 'month' && date && `${format(startOfWeek(startOfMonth(date)), 'MMM d')} - ${format(endOfWeek(endOfMonth(date)), 'MMM d')}`}
+                    {view === 'week' && date && `${format(startOfWeek(date), 'MMM d')} - ${format(endOfWeek(date), 'MMM d')}`}
+                    {view === 'day' && date && format(date, 'EEEE')}
                  </span>
-                 <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md hover:bg-zinc-700 hover:text-white" onClick={handleNextMonth}>
+                 <Button variant="ghost" size="icon" className="h-7 w-7 rounded-md hover:bg-zinc-700 hover:text-white" onClick={handleNext}>
                      <ChevronRight className="h-4 w-4" />
                  </Button>
              </div>
@@ -188,7 +211,22 @@ export default function ScheduleTab() {
                 posts={posts}
             />
           )}
-          {/* ... */}
+          {view === 'week' && (
+             <WeekGrid 
+                date={date} 
+                selectedDate={selectedDate} 
+                onSelectDate={onDateClick} 
+                onDoubleClickDate={onDateDoubleClick}
+                posts={posts}
+             />
+          )}
+          {view === 'day' && (
+              <DayGrid 
+                  date={date}
+                  posts={posts}
+                  onEdit={() => {}}
+              />
+          )}
       </div>
 
       {/* Dialogs */}
@@ -231,9 +269,9 @@ function CalendarGrid({ date, selectedDate, onSelectDate, onDoubleClickDate, pos
       const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
       return (
-          <div className="flex flex-col h-full">
+          <div className="flex flex-col h-full rounded-xl overflow-hidden border border-zinc-800 bg-black/40">
               {/* Days Header */}
-               <div className="grid grid-cols-7 border-b border-zinc-800">
+               <div className="grid grid-cols-7 border-b border-zinc-800 bg-zinc-900/50">
                   {weekDays.map(d => (
                       <div key={d} className="py-3 text-center text-xs font-semibold text-zinc-500 uppercase tracking-wider">
                           {d}
@@ -305,4 +343,143 @@ function CalendarGrid({ date, selectedDate, onSelectDate, onDoubleClickDate, pos
               </div>
           </div>
       )
+}
+
+function WeekGrid({ date, selectedDate, onSelectDate, onDoubleClickDate, posts }: CalendarGridProps) {
+    if (!date) return null;
+    const weekStart = startOfWeek(date);
+    const weekEnd = endOfWeek(date);
+    const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
+
+    return (
+        <div className="flex flex-col h-full rounded-xl overflow-hidden border border-zinc-800 bg-black/40">
+             <div className="grid grid-cols-7 h-full divide-x divide-zinc-800">
+                 {weekDays.map((dayItem) => {
+                     const isSelected = selectedDate ? isSameDay(dayItem, selectedDate) : false;
+                     const isToday = isSameDay(dayItem, new Date());
+                     const dayPosts = posts.filter(p => isSameDay(new Date(p.scheduled_at), dayItem));
+
+                     return (
+                         <div 
+                             key={dayItem.toString()}
+                             onClick={() => onSelectDate(dayItem)}
+                             onDoubleClick={() => onDoubleClickDate(dayItem)}
+                             className={cn(
+                                 "flex flex-col h-full hover:bg-zinc-900/30 transition-colors cursor-pointer group",
+                                 isSelected && "bg-violet-900/5 ring-inset ring-1 ring-violet-500/20"
+                             )}
+                         >
+                             {/* Header */}
+                             <div className={cn(
+                                 "p-3 text-center border-b border-zinc-800 sticky top-0 bg-inherit z-10",
+                                 isToday && "bg-zinc-900"
+                             )}>
+                                 <div className="text-xs font-medium text-zinc-500 uppercase mb-1">{format(dayItem, 'EEE')}</div>
+                                 <div className={cn(
+                                     "text-xl font-bold w-10 h-10 mx-auto flex items-center justify-center rounded-full",
+                                      isToday ? "bg-violet-600 text-white" : "text-zinc-200 group-hover:bg-zinc-800"
+                                 )}>
+                                     {format(dayItem, 'd')}
+                                 </div>
+                             </div>
+
+                             {/* Content */}
+                             <div className="flex-1 p-2 space-y-2 overflow-y-auto">
+                                 {dayPosts.map(post => (
+                                      <div key={post.id} className={cn(
+                                        "p-2 rounded-lg border text-xs shadow-sm transition-all hover:scale-[1.02]",
+                                        getPostColor(post.id)
+                                    )}>
+                                         <div className="flex items-center gap-2 mb-1">
+                                             {post.platform && getPlatformIcon(post.platform)}
+                                             <span className="font-bold opacity-90">{format(new Date(post.scheduled_at), 'h:mm a')}</span>
+                                         </div>
+                                         <div className="font-medium truncate">{post.post_type}</div>
+                                         <div className="text-[10px] opacity-75 truncate">{post.caption || 'No caption'}</div>
+                                    </div>
+                                 ))}
+                             </div>
+                         </div>
+                     );
+                 })}
+             </div>
+        </div>
+    );
+}
+
+function DayGrid({ date, posts, onEdit }: { date: Date | undefined; posts: ScheduledPost[]; onEdit: (post: ScheduledPost) => void }) {
+    if (!date) return null;
+    
+    // Sort posts by time
+    const dayPosts = posts
+        .filter(p => isSameDay(new Date(p.scheduled_at), date))
+        .sort((a,b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
+
+    return (
+        <div className="h-full flex flex-col max-w-3xl mx-auto">
+             <div className="mb-6 flex items-end gap-4">
+                 <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex flex-col items-center justify-center text-zinc-200 shadow-sm">
+                     <span className="text-xs font-semibold uppercase text-zinc-500">{format(date, 'MMM')}</span>
+                     <span className="text-2xl font-bold">{format(date, 'd')}</span>
+                 </div>
+                 <div>
+                     <h3 className="text-2xl font-bold text-white">{format(date, 'EEEE')}</h3>
+                     <p className="text-zinc-500">
+                         {dayPosts.length} post{dayPosts.length !== 1 ? 's' : ''} scheduled
+                     </p>
+                 </div>
+             </div>
+
+             <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+                 {dayPosts.length === 0 ? (
+                     <div className="h-64 flex flex-col items-center justify-center text-zinc-600 border border-dashed border-zinc-800 rounded-xl bg-zinc-900/20">
+                         <Clock className="w-8 h-8 mb-3 opacity-50" />
+                         <p>No posts scheduled for this day</p>
+                     </div>
+                 ) : (
+                     dayPosts.map(post => (
+                         <div key={post.id} className="group flex gap-4 p-4 rounded-xl border border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900/50 hover:border-zinc-700 transition-all">
+                             {/* Time Column */}
+                             <div className="w-20 pt-1 text-right flex-shrink-0">
+                                 <span className="text-sm font-semibold text-zinc-300 block">{format(new Date(post.scheduled_at), 'h:mm a')}</span>
+                             </div>
+
+                             {/* Card */}
+                             <div className="flex-1">
+                                 <div className={cn("inline-flex items-center gap-2 px-2.5 py-1 rounded-md text-xs font-medium border mb-3", getPostColor(post.id))}>
+                                     {post.platform && getPlatformIcon(post.platform)}
+                                     <span>{post.post_type}</span>
+                                 </div>
+                                 
+                                 <div className="flex gap-4">
+                                     {post.media_url && (
+                                         <div className="w-24 h-24 rounded-lg bg-black border border-zinc-800 overflow-hidden flex-shrink-0">
+                                             {post.media_url.endsWith('.mp4') || post.media_url.startsWith('data:video') ? (
+                                                  <video src={post.media_url} className="w-full h-full object-cover" />
+                                             ) : (
+                                                  <img src={post.media_url} alt="Post media" className="w-full h-full object-cover" />
+                                             )}
+                                         </div>
+                                     )}
+                                     <div className="flex-1 min-w-0">
+                                        <p className="text-sm text-zinc-300 mb-2 line-clamp-3">{post.caption || 'No caption provided.'}</p>
+                                        <div className="flex items-center gap-4 text-xs text-zinc-500">
+                                            <span className={cn(
+                                                "capitalize px-1.5 py-0.5 rounded-full border",
+                                                post.status === 'published' ? "bg-green-500/10 text-green-500 border-green-500/20" : 
+                                                post.status === 'failed' ? "bg-red-500/10 text-red-500 border-red-500/20" : 
+                                                "bg-blue-500/10 text-blue-500 border-blue-500/20"
+                                            )}>
+                                                {post.status}
+                                            </span>
+                                        </div>
+                                     </div>
+                                 </div>
+                             </div>
+                         </div>
+                     ))
+                 )}
+             </div>
+        </div>
+    )
 }
