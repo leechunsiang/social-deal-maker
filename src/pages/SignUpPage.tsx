@@ -4,7 +4,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, ArrowLeft, Key } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { useNavigate } from 'react-router-dom';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -13,6 +15,7 @@ function cn(...inputs: ClassValue[]) {
 }
 
 const signUpSchema = z.object({
+  accessKey: z.string().min(1, 'Access key is required'),
   username: z.string().min(3, 'Username must be at least 3 characters'),
   firstName: z.string().min(2, 'First name is required'),
   lastName: z.string().min(2, 'Last name is required'),
@@ -32,6 +35,8 @@ type SignUpFormValues = z.infer<typeof signUpSchema>;
 export default function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const navigate = useNavigate();
   
   const { register, handleSubmit, watch, formState: { errors } } = useForm<SignUpFormValues>({
     resolver: zodResolver(signUpSchema),
@@ -42,9 +47,35 @@ export default function SignUpPage() {
 
   const password = watch('password');
 
-  const onSubmit = (data: SignUpFormValues) => {
-    console.log(data);
-    // Handle signup logic here
+  const onSubmit = async (data: SignUpFormValues) => {
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.signUp({
+        email: data.email,
+        password: data.password,
+        options: {
+          data: {
+            first_name: data.firstName,
+            last_name: data.lastName,
+            username: data.username,
+            access_key: data.accessKey,
+          },
+        },
+      });
+
+      if (error) {
+        alert(error.message);
+        return;
+      }
+
+      alert('Account created successfully!');
+      navigate('/login');
+    } catch (error) {
+      console.error('Signup error:', error);
+      alert('An unexpected error occurred during sign up.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const getStrength = (pass: string) => {
@@ -80,6 +111,21 @@ export default function SignUpPage() {
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-zinc-400 mb-1">Access Key</label>
+            <div className="relative">
+                <input 
+                  {...register('accessKey')}
+                  className="w-full bg-zinc-800/50 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-violet-500 transition-colors pl-10"
+                  placeholder="Enter your access key"
+                />
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">
+                    <Key size={18} />
+                </div>
+            </div>
+             {errors.accessKey && <p className="text-red-400 text-xs mt-1">{errors.accessKey.message}</p>}
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-zinc-400 mb-1">First Name</label>
@@ -183,9 +229,10 @@ export default function SignUpPage() {
 
           <button 
             type="submit"
-            className="w-full py-3.5 rounded-xl bg-linear-to-r from-violet-600 to-cyan-500 text-white font-bold shadow-lg shadow-violet-500/20 hover:shadow-violet-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-2"
+            disabled={isLoading}
+            className="w-full py-3.5 rounded-xl bg-linear-to-r from-violet-600 to-cyan-500 text-white font-bold shadow-lg shadow-violet-500/20 hover:shadow-violet-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Create Account <ArrowRight size={18} />
+            {isLoading ? 'Creating Account...' : <><span className="mr-1">Create Account</span> <ArrowRight size={18} /></>}
           </button>
         </form>
 
