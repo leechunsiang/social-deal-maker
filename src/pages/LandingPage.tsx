@@ -14,7 +14,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Footer } from '../components/Footer';
+
 import { cn } from '../lib/utils';
 import { DashboardTab } from '../components/dashboard/DashboardTab';
 import { SocialTab } from '../components/dashboard/SocialTab';
@@ -213,7 +213,7 @@ export default function LandingPage() {
               {activeTab === 'image' && <ImageTab />}
               {activeTab === 'repurpose' && <RepurposeTab />}
           </div>
-          <Footer />
+
       </main>
     </div>
   );
