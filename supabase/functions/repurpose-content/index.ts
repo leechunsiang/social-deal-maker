@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -124,12 +125,23 @@ serve(async (req) => {
     if (generatedImagePath) {
       sourceType = "generated_image";
 
-      // Get public URL for the image
-      const { data: publicUrlData } = supabase.storage
+      // Download image from Supabase Storage
+      const { data: imageBlob, error: downloadError } = await supabase.storage
         .from("generated_images")
-        .getPublicUrl(generatedImagePath);
+        .download(generatedImagePath);
 
-      const imageUrl = publicUrlData.publicUrl;
+      if (downloadError || !imageBlob) {
+        throw new Error(
+          `Failed to download image: ${
+            downloadError?.message || "Unknown error"
+          }`
+        );
+      }
+
+      // Convert Blob to ArrayBuffer then to Base64
+      const arrayBuffer = await imageBlob.arrayBuffer();
+      const base64Image = encode(arrayBuffer);
+      const mimeType = imageBlob.type || "image/png"; // Default to png if unknown
 
       // Use OpenAI Vision API to analyze the image
       const visionResponse = await fetch(
@@ -153,7 +165,7 @@ serve(async (req) => {
                   {
                     type: "image_url",
                     image_url: {
-                      url: imageUrl,
+                      url: `data:${mimeType};base64,${base64Image}`,
                     },
                   },
                 ],
