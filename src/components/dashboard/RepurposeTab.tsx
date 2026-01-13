@@ -217,7 +217,7 @@ export function RepurposeTab() {
         content?: string;
         generatedImagePath?: string;
         uploadedFilePath?: string;
-        fileType?: 'text' | 'image' | 'docx';
+        fileType?: 'text' | 'image' | 'docx' | 'pdf';
       } = {
         outputFormat: selectedFormat,
       };
@@ -255,10 +255,12 @@ export function RepurposeTab() {
           requestBody.fileType = 'image';
         } else if (uploadedFile.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || uploadedFile.name.endsWith('.docx')) {
            requestBody.fileType = 'docx';
+        } else if (uploadedFile.type === 'application/pdf' || uploadedFile.name.endsWith('.pdf')) {
+          requestBody.fileType = 'pdf';
         } else if (uploadedFile.type.startsWith('text/') || uploadedFile.name.endsWith('.md')) {
           requestBody.fileType = 'text';
         } else {
-          // Default to text if we can read it, or handle PDF later
+          // Default to text if we can read it
            requestBody.fileType = 'text';
         }
       }

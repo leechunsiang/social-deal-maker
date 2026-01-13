@@ -2,6 +2,8 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import mammoth from "https://esm.sh/mammoth@1.6.0";
+import pdf from "npm:pdf-parse@1.1.1";
+import { Buffer } from "node:buffer";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -162,6 +164,12 @@ serve(async (req) => {
         }
       } else if (fileType === "image") {
         uploadedImageBlob = fileBlob;
+      } else if (fileType === "pdf") {
+        const arrayBuffer = await fileBlob.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const data = await pdf(buffer);
+        contentToRepurpose = data.text;
+        originalContent = contentToRepurpose;
       }
     } else if (generatedImagePath) {
       sourceType = "generated_image";
