@@ -10,6 +10,7 @@ import { format, isSameDay } from 'date-fns';
 import { TimePicker } from './TimePicker';
 import { cn } from '@/lib/utils';
 import { RepurposedContentSelector } from './RepurposedContentSelector';
+import { GeneratedImageSelector } from './GeneratedImageSelector';
 
 interface SchedulePostDialogProps {
   isOpen: boolean;
@@ -28,6 +29,7 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
   const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
   const [caption, setCaption] = useState('');
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
+  const [isImageSelectorOpen, setIsImageSelectorOpen] = useState(false);
   
   // State changes for features
   const [selectedPostTypes, setSelectedPostTypes] = useState<string[]>(['POST']);
@@ -114,6 +116,20 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
           } catch (err) {
               console.error("Failed to load repurposed image:", err);
           }
+      }
+  };
+
+  const handleGeneratedImageSelect = async (imageUrl: string) => {
+      try {
+          // Fetch the image and convert to File
+          const response = await fetch(imageUrl);
+          const blob = await response.blob();
+          const fileName = `generated-image-${Date.now()}.png`;
+          const file = new File([blob], fileName, { type: blob.type });
+          
+          addFiles([file]);
+      } catch (err) {
+          console.error("Failed to load generated image:", err);
       }
   };
 
@@ -324,7 +340,24 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
           <div className="space-y-3">
             <div className="flex items-center justify-between">
                 <Label className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Media</Label>
-                <span className="text-xs text-zinc-500 font-medium">{mediaFiles.length} / 10 selected</span>
+                <div className="flex items-center gap-2">
+                    {validationError && (
+                        <span className="text-[10px] text-red-500 font-medium animate-pulse">{validationError}</span>
+                    )}
+                    <span className="text-xs text-zinc-500 font-medium">{mediaFiles.length} / 10 selected</span>
+                </div>
+            </div>
+            
+            <div className="flex justify-end mb-2">
+                 <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setIsImageSelectorOpen(true)}
+                    className="text-xs h-7 border-zinc-800 bg-zinc-900/50 hover:bg-zinc-900 hover:text-white hover:border-zinc-700"
+                   >
+                       <ImageIcon className="w-3 h-3 mr-1.5 text-blue-500" />
+                       Select Generated Image
+                 </Button>
             </div>
             
             {mediaPreviews.length === 0 ? (
@@ -502,6 +535,12 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
         isOpen={isSelectorOpen} 
         onClose={() => setIsSelectorOpen(false)} 
         onSelect={handleRepurposedSelect}
+    />
+    
+    <GeneratedImageSelector
+        isOpen={isImageSelectorOpen}
+        onClose={() => setIsImageSelectorOpen(false)}
+        onSelect={handleGeneratedImageSelect}
     />
     </>
   );
