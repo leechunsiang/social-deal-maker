@@ -9,7 +9,9 @@ import {
   X,
   LogOut,
   User as UserIcon,
-  Rss
+  Rss,
+  Image as ImageIcon,
+  Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Footer } from '../components/Footer';
@@ -19,11 +21,13 @@ import { SocialTab } from '../components/dashboard/SocialTab';
 import ScheduleTab from '../components/dashboard/ScheduleTab';
 import { VideoTab } from '../components/dashboard/VideoTab';
 import { MyFeedTab } from '../components/dashboard/MyFeedTab';
+import { ImageTab } from '../components/dashboard/ImageTab';
+import { RepurposeTab } from '../components/dashboard/RepurposeTab';
 import { NotificationBell } from '../components/dashboard/Notifications';
 import { supabase } from '../lib/supabase';
 import type { User } from '@supabase/supabase-js';
 
-type Tab = 'dashboard' | 'feed' | 'social' | 'schedule' | 'video';
+type Tab = 'dashboard' | 'feed' | 'social' | 'schedule' | 'video' | 'image' | 'repurpose';
 
 export default function LandingPage() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
@@ -55,6 +59,8 @@ export default function LandingPage() {
     { id: 'social', label: 'Social', icon: Share2 },
     { id: 'schedule', label: 'Schedule', icon: Calendar },
     { id: 'video', label: 'Video', icon: Video },
+    { id: 'image', label: 'Image', icon: ImageIcon },
+    { id: 'repurpose', label: 'Repurpose', icon: Sparkles },
   ];
 
   return (
@@ -204,6 +210,8 @@ export default function LandingPage() {
               {activeTab === 'social' && <SocialTab />}
               {activeTab === 'schedule' && <ScheduleTab />}
               {activeTab === 'video' && <VideoTab />}
+              {activeTab === 'image' && <ImageTab />}
+              {activeTab === 'repurpose' && <RepurposeTab />}
           </div>
           <Footer />
       </main>

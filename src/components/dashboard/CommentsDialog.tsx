@@ -6,6 +6,7 @@ import { MessageCircle, RefreshCw, User, Heart, Reply, Send } from 'lucide-react
 import { supabase } from '../../lib/supabase';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { AIReplyButton } from './AIReplyButton';
 
 interface Comment {
   id: string;
@@ -270,7 +271,7 @@ export function CommentsDialog({ isOpen, onClose, postId, fbPostId, platform }: 
 
                   {/* Reply Form */}
                   {replyingToCommentId === comment.id && (
-                    <div className="mt-3 space-y-2 border-t border-white/5 pt-3">
+                    <div className="mt-3 space-y-2 border-t border-white/5 pt-3 relative">
                       <Textarea
                         value={replyText}
                         onChange={(e) => setReplyText(e.target.value)}
@@ -278,6 +279,14 @@ export function CommentsDialog({ isOpen, onClose, postId, fbPostId, platform }: 
                         className="min-h-[80px] bg-zinc-800/50 border-white/10 text-white placeholder:text-zinc-500 resize-none"
                         disabled={submittingReply}
                       />
+                      <div className="absolute top-2 right-2">
+                         <AIReplyButton
+                            context={`Comment: ${comment.message}`}
+                            onGenerate={(reply) => setReplyText(reply)}
+                            platform={platform}
+                            className="bg-zinc-800/80 hover:bg-zinc-700 backdrop-blur-sm"
+                        />
+                      </div>
                       <div className="flex gap-2 justify-end">
                         <Button
                           variant="ghost"

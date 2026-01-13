@@ -12,6 +12,7 @@ import {
   Square,
   Video
 } from 'lucide-react';
+import { AIReplyButton } from './AIReplyButton';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../../lib/utils';
 import { supabase } from '../../lib/supabase';
@@ -1224,6 +1225,15 @@ export function SocialTab() {
                         )}
 
                         {!isRecording && (
+                          <div className="flex gap-2">
+                             <AIReplyButton
+                                context={chatMessages.slice(-5).map(m => 
+                                    `${m.message.type === 'me' ? 'Me' : 'User'}: ${m.message.content || '[Attachment]'}`
+                                ).join('\n')}
+                                onGenerate={(reply) => setInputMessage(reply)}
+                                platform={activePlatform}
+                                className="p-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white rounded-xl"
+                            />
                             <button
                                 type="button"
                                 onClick={handleStartRecording}
@@ -1236,6 +1246,7 @@ export function SocialTab() {
                             >
                                 <Mic className="size-5" />
                             </button>
+                          </div>
                         )}
                         
                         <button 

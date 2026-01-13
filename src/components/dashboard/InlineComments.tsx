@@ -5,6 +5,7 @@ import { MessageCircle, RefreshCw, User, Heart, ChevronDown, ChevronUp, Reply, S
 import { supabase } from '../../lib/supabase';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { AIReplyButton } from './AIReplyButton';
 
 interface Comment {
     id: string;
@@ -306,7 +307,7 @@ export function InlineComments({ postId, fbPostId, igPostId, platform, autoFetch
 
                                     {/* Reply Form */}
                                     {replyingToCommentId === comment.id && (
-                                        <div className="pl-9 space-y-2 border-t border-white/5 pt-2 mt-2">
+                                        <div className="pl-9 space-y-2 border-t border-white/5 pt-2 mt-2 relative">
                                             <Textarea
                                                 value={replyText}
                                                 onChange={(e) => setReplyText(e.target.value)}
@@ -314,6 +315,14 @@ export function InlineComments({ postId, fbPostId, igPostId, platform, autoFetch
                                                 className="min-h-[60px] bg-zinc-800/50 border-white/10 text-white text-xs placeholder:text-zinc-500 resize-none"
                                                 disabled={submittingReply}
                                             />
+                                            <div className="absolute top-2 right-2">
+                                                <AIReplyButton
+                                                    context={`Comment: ${comment.message}`}
+                                                    onGenerate={(reply) => setReplyText(reply)}
+                                                    platform={platform}
+                                                    className="bg-zinc-800/80 hover:bg-zinc-700 backdrop-blur-sm"
+                                                />
+                                            </div>
                                             <div className="flex gap-2 justify-end">
                                                 <Button
                                                     variant="ghost"
