@@ -134,11 +134,23 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
   };
 
   const handleSave = async () => {
-    if (!selectedDate || (mediaFiles.length === 0 && caption.length === 0) || selectedPostTypes.length === 0 || selectedPlatforms.length === 0) return;
+    if (!selectedDate || (mediaFiles.length === 0 && caption.length === 0) || selectedPostTypes.length === 0 || selectedPlatforms.length === 0 || caption.length > 2200) return;
 
     setIsSubmitting(true);
+
     try {
-      // 1. Upload All Media (if any)
+      // 1. Check Authentication FIRST
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      const userId = user?.id;
+
+      if (authError || !userId) {
+          console.error("User not authenticated:", authError);
+          alert("You are not logged in. Please log in to schedule posts.");
+          setIsSubmitting(false);
+          return;
+      }
+
+      // 2. Upload All Media (if any)
       let uploadedUrls: string[] = [];
       let mainMediaUrl: string | null = null;
       
@@ -154,28 +166,18 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
     
               if (uploadError) {
                   console.error('Upload Error:', uploadError);
-                  // Fallback for demo if missing bucket
-                  return URL.createObjectURL(file);
-              } else {
-                  const { data: urlData } = supabase.storage.from('posts').getPublicUrl(filePath);
-                  return urlData.publicUrl;
-              }
+                  throw new Error(`Failed to upload image: ${uploadError.message}`);
+              } 
+              
+              const { data: urlData } = supabase.storage.from('posts').getPublicUrl(filePath);
+              return urlData.publicUrl;
           });
     
           uploadedUrls = await Promise.all(uploadPromises);
           mainMediaUrl = uploadedUrls[0]; // Use first image as thumbnail
       }
 
-      // 2. Insert into Database (Loop through selected types & platforms)
-      const { data: { user } } = await supabase.auth.getUser();
-      const userId = user?.id;
-
-      if (!userId) {
-          console.error("User not authenticated. Please log in.");
-          alert("You are not logged in. Please log in to schedule posts. (Check console)");
-          setIsSubmitting(false);
-          return;
-      }
+      // 3. Insert into Database (Loop through selected types & platforms)
 
       const scheduledAt = new Date(selectedDate);
       if (postNow) {
@@ -217,12 +219,26 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
 
       if (dbError) throw dbError;
 
-      // 3. If Post Now, trigger Edge Function immediately
+              // 3. If Post Now, trigger Edge Function immediately
       if (postNow && insertedPosts) {
           // Iterate over the inserted posts
           for (const post of insertedPosts) {
              const { id, platform, post_type, media_urls, media_url, caption } = post;
              
+             // Only auto-publish for Instagram and Facebook
+             if (platform !== 'instagram' && platform !== 'facebook') {
+                 console.log(`Skipping auto-publish for ${platform} (not supported yet)`);
+                 continue;
+             }
+
+             // CHECK: If URL is localhost, warn user
+             const isLocalhost = media_urls?.some((url: string) => url.includes('localhost') || url.includes('127.0.0.1'));
+             if (isLocalhost) {
+                 alert(`Cannot publish to ${platform} using localhost URLs. Instagram/Facebook requires a public, Internet-accessible URL for images/videos.\n\nPlease use a production Supabase project or tunneling (e.g. ngrok) for local development.`);
+                 console.error(`Localhost URL detected: ${media_urls}. Aborting publish request.`);
+                 continue; // Skip invoking the function
+             }
+
              const targetFunction = platform === 'facebook' ? 'publish-facebook-post' : 'publish-instagram-post';
 
              const payload = {
@@ -233,16 +249,18 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
                  post_type: post_type
              };
 
-             console.log(`Invoking ${targetFunction} for post ${id}...`);
+             console.log(`Invoking ${targetFunction} for post ${id} with payload:`, payload);
              const { data, error: funcError } = await supabase.functions.invoke(targetFunction, {
                 body: payload
              });
 
              if (funcError || data?.error) {
                  console.error(`Failed to publish to ${platform}:`, funcError || data?.error);
-                 alert(`Failed to publish to ${platform}. Check console.`);
+                 const errorMessage = funcError?.message || data?.error || 'Unknown error';
+                 alert(`Failed to publish to ${platform}. Error: ${errorMessage}`);
              } else {
                  console.log(`Successfully published to ${platform}`);
+                 alert(`Successfully published to ${platform}!`);
              }
           }
       }
@@ -297,6 +315,27 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
                         icon: (
                           <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
                             <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.791-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                          </svg>
+                        )
+                      },
+                      { id: 'x', label: 'X (Twitter)', color: 'from-zinc-400 to-zinc-600',
+                        icon: (
+                          <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+                            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                          </svg>
+                        )
+                      },
+                      { id: 'linkedin', label: 'LinkedIn', color: 'from-blue-700 to-blue-500',
+                        icon: (
+                          <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+                            <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                          </svg>
+                        )
+                      },
+                      { id: 'tiktok', label: 'TikTok', color: 'from-pink-500 to-cyan-500',
+                        icon: (
+                          <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+                             <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/>
                           </svg>
                         )
                       }
@@ -462,8 +501,19 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
                     value={caption} 
                     onChange={(e) => setCaption(e.target.value)} 
                     placeholder="Write a caption..." 
-                    className="bg-zinc-900/50 border-zinc-800 min-h-[120px] resize-none focus:bg-zinc-900 transition-colors p-4"
+                    className={cn(
+                        "bg-zinc-900/50 border-zinc-800 min-h-[120px] resize-none focus:bg-zinc-900 transition-colors p-4",
+                        caption.length > 2200 && "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+                    )}
                 />
+                <div className="absolute bottom-2 right-2 flex items-center gap-2">
+                    <span className={cn(
+                        "text-[10px] font-medium px-1.5 py-0.5 rounded-md",
+                        caption.length > 2200 ? "text-red-400 bg-red-500/10" : "text-zinc-500 bg-zinc-800"
+                    )}>
+                        {caption.length} / 2200
+                    </span>
+                </div>
             </div>
           </div>
 
@@ -520,7 +570,7 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
            <Button variant="ghost" onClick={onClose} disabled={isSubmitting} className="hover:bg-zinc-900 hover:text-white">Cancel</Button>
            <Button 
             onClick={handleSave} 
-            disabled={isSubmitting || (mediaFiles.length === 0 && caption.length === 0) || selectedPostTypes.length === 0 || !!validationError}
+            disabled={isSubmitting || (mediaFiles.length === 0 && caption.length === 0) || selectedPostTypes.length === 0 || !!validationError || caption.length > 2200}
             className="bg-white text-black hover:bg-zinc-200"
           >
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

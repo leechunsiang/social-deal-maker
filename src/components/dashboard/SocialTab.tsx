@@ -10,7 +10,8 @@ import {
   Image as ImageIcon,
   Mic,
   Square,
-  Video
+  Video,
+  Phone
 } from 'lucide-react';
 import { AIReplyButton } from './AIReplyButton';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -57,7 +58,7 @@ export function SocialTab() {
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [activePlatform, setActivePlatform] = useState<'instagram' | 'messenger'>('instagram');
+  const [activePlatform, setActivePlatform] = useState<'instagram' | 'messenger' | 'whatsapp'>('instagram');
 
   // Initial Fetch
   useEffect(() => {
@@ -967,87 +968,122 @@ export function SocialTab() {
                         Messages
                     </h2>
                     
-                    {/* Platform Switcher */}
-                    <div className="flex p-1 bg-zinc-800/50 rounded-lg">
-                        <button 
-                            onClick={() => setActivePlatform('instagram')}
-                            className={cn(
-                                "flex-1 py-1.5 text-xs font-medium rounded-md transition-all",
-                                activePlatform === 'instagram' 
-                                    ? "bg-violet-600 text-white shadow-sm" 
-                                    : "text-zinc-400 hover:text-zinc-200"
-                            )}
-                        >
-                            Instagram
-                        </button>
-                        <button 
-                            onClick={() => setActivePlatform('messenger')}
-                             className={cn(
-                                "flex-1 py-1.5 text-xs font-medium rounded-md transition-all",
-                                activePlatform === 'messenger' 
-                                    ? "bg-violet-600 text-white shadow-sm" 
-                                    : "text-zinc-400 hover:text-zinc-200"
-                            )}
-                        >
-                            Messenger
-                        </button>
-                    </div>
+          {/* Tabs */}
+        <div className="flex items-center gap-2 mb-6">
+            <button 
+                onClick={() => setActivePlatform('instagram')}
+                className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                    activePlatform === 'instagram' 
+                        ? "bg-violet-600 text-white" 
+                        : "bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800"
+                )}
+            >
+                <div className="bg-gradient-to-tr from-yellow-500 via-pink-500 to-purple-500 rounded-md p-1">
+                    <svg viewBox="0 0 24 24" fill="white" className="w-3 h-3">
+                        <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+                    </svg>
                 </div>
-                
-                {/* User List Container with max-height for scrolling */}
+                Instagram
+            </button>
+            <button 
+                onClick={() => setActivePlatform('messenger')}
+                className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                    activePlatform === 'messenger' 
+                        ? "bg-blue-600 text-white" 
+                        : "bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800"
+                )}
+            >
+                <div className="bg-blue-500 rounded-full p-1">
+                    <svg viewBox="0 0 24 24" fill="white" className="w-3 h-3">
+                        <path d="M12 2a10 10 0 0 0-9.85 11.23L.5 22l8.77-1.65A10 10 0 1 0 12 2zm1 14.5-2.5-2.5-5 5 5.5-5.5 2.5 2.5 5-5-5.5 5.5z"/>
+                    </svg>
+                </div>
+                Messenger
+            </button>
+            <button 
+                onClick={() => setActivePlatform('whatsapp')}
+                className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                    activePlatform === 'whatsapp' 
+                        ? "bg-green-600 text-white" 
+                        : "bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800"
+                )}
+            >
+                <div className="bg-green-500 rounded-full p-1">
+                    <Phone className="w-3 h-3 text-white" />
+                </div>
+                WhatsApp
+            </button>
+                </div>
+            </div>
+
+            {activePlatform === 'whatsapp' ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-12 text-center bg-zinc-900/20 rounded-2xl border border-zinc-800/50">
+                    <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mb-6">
+                        <Phone className="w-10 h-10 text-green-500" />
+                    </div>
+                    <h3 className="text-2xl font-bold text-white mb-2">WhatsApp Integration</h3>
+                    <p className="text-zinc-400 max-w-md">
+                        We are currently working on this feature. Check back soon for seamless WhatsApp messaging directly from your dashboard.
+                    </p>
+                </div>
+            ) : (
                 <div className="flex-1 overflow-y-auto p-2 space-y-1 max-h-[600px]">
                     {loadingProfiles ? (
-                    <div className="flex items-center justify-center py-10">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-violet-500"></div>
-                    </div>
+                        <div className="flex items-center justify-center py-10">
+                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-violet-500"></div>
+                        </div>
                     ) : profiles.length > 0 ? (
-                    profiles.map((profile) => (
-                        <button 
-                        key={String(profile.id)} 
-                        onClick={() => setSelectedProfile(profile)}
-                        className={cn(
-                            "w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left group border border-transparent",
-                            selectedProfile?.id === profile.id 
-                            ? "bg-violet-600/10 border-violet-500/20 shadow-lg shadow-violet-500/5"
-                            : "hover:bg-white/5"
-                        )}
-                        >
-                        <div className="relative">
-                            <div className={cn(
-                            "h-10 w-10 rounded-full overflow-hidden border transition-colors",
-                            selectedProfile?.id === profile.id 
-                                ? "border-violet-500" 
-                                : "border-white/10 group-hover:border-violet-500/50"
-                            )}>
-                            {profile.profile_pic ? (
-                                <img src={profile.profile_pic} alt={profile.name} className="h-full w-full object-cover" />
-                            ) : (
-                                <div className="h-full w-full bg-zinc-800 flex items-center justify-center">
-                                <User className="h-5 w-5 text-zinc-500" />
+                        profiles.map((profile) => (
+                            <button 
+                                key={String(profile.id)} 
+                                onClick={() => setSelectedProfile(profile)}
+                                className={cn(
+                                    "w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left group border border-transparent",
+                                    selectedProfile?.id === profile.id 
+                                        ? "bg-violet-600/10 border-violet-500/20 shadow-lg shadow-violet-500/5"
+                                        : "hover:bg-white/5"
+                                )}
+                            >
+                                <div className="relative">
+                                    <div className={cn(
+                                        "h-10 w-10 rounded-full overflow-hidden border transition-colors",
+                                        selectedProfile?.id === profile.id 
+                                            ? "border-violet-500" 
+                                            : "border-white/10 group-hover:border-violet-500/50"
+                                    )}>
+                                        {profile.profile_pic ? (
+                                            <img src={profile.profile_pic} alt={profile.name} className="h-full w-full object-cover" />
+                                        ) : (
+                                            <div className="h-full w-full bg-zinc-800 flex items-center justify-center">
+                                                <User className="h-5 w-5 text-zinc-500" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="absolute bottom-0 right-0 h-3 w-3 bg-green-500 rounded-full border-2 border-zinc-900"></div>
                                 </div>
-                            )}
-                            </div>
-                            <div className="absolute bottom-0 right-0 h-3 w-3 bg-green-500 rounded-full border-2 border-zinc-900"></div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <h3 className={cn(
-                            "font-semibold text-sm truncate",
-                            selectedProfile?.id === profile.id ? "text-violet-200" : "text-zinc-200"
-                            )}>
-                            {profile.name}
-                            </h3>
-                            <p className="text-zinc-500 text-xs truncate">
-                                {activePlatform === 'messenger' ? 'Messenger User' : `@${profile.username}`}
-                            </p>
-                        </div>
-                        </button>
-                    ))
+                                <div className="flex-1 min-w-0">
+                                    <h3 className={cn(
+                                        "font-semibold text-sm truncate",
+                                        selectedProfile?.id === profile.id ? "text-violet-200" : "text-zinc-200"
+                                    )}>
+                                        {profile.name}
+                                    </h3>
+                                    <p className="text-zinc-500 text-xs truncate">
+                                        {activePlatform === 'messenger' ? 'Messenger User' : `@${profile.username}`}
+                                    </p>
+                                </div>
+                            </button>
+                        ))
                     ) : (
-                    <div className="p-4 text-center text-zinc-500 text-sm">
-                        No {activePlatform} profiles found.
-                    </div>
+                        <div className="p-4 text-center text-zinc-500 text-sm">
+                            No {activePlatform} profiles found.
+                        </div>
                     )}
                 </div>
+            )}
             </div>
 
             {/* Right Section: Chat Interface */}
@@ -1286,3 +1322,4 @@ export function SocialTab() {
     </div>
   );
 }
+

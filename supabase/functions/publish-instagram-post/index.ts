@@ -13,7 +13,8 @@ serve(async (req) => {
   }
 
   try {
-    const { media_urls, media_url, caption, post_type, post_id } = await req.json();
+    const { media_urls, media_url, caption, post_type, post_id } =
+      await req.json();
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -93,7 +94,8 @@ serve(async (req) => {
 
       if (data.error) {
         throw new Error(
-          `Container Creation Error (${isCarouselItem ? "Item" : "Single"}): ${data.error.message
+          `Container Creation Error (${isCarouselItem ? "Item" : "Single"}): ${
+            data.error.message
           }`
         );
       }
@@ -226,7 +228,7 @@ serve(async (req) => {
     console.error("Edge Function Error:", error);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 400,
+      status: 200, // Return 200 so client can read the error message body
     });
   }
 });
