@@ -67,10 +67,13 @@ export default function LandingPage() {
     <div className="flex min-h-screen bg-zinc-950 text-white font-sans selection:bg-violet-500/30">
       {/* Sidebar for Desktop */}
       <aside className="hidden md:flex flex-col w-64 bg-zinc-900/50 border-r border-white/5 fixed top-0 bottom-0 left-0 z-40 backdrop-blur-xl">
-<div className="p-6 border-b border-zinc-200 bg-white shadow-sm">
-             <div className="flex flex-col items-center gap-3 text-center">
-                 <img src="/kadoshAI-removebg.png" alt="KadoshAI Logo" className="h-12 w-auto" />
-                 <span className="font-bold text-lg tracking-tight text-zinc-950">Social Deal Maker</span>
+<div className="p-6 border-b border-white/5 bg-transparent">
+             <div className="flex flex-col items-center gap-1">
+                 <div className="flex items-center gap-2">
+                     <img src="/KadoshAI_Logo.png" alt="KadoshAI Logo" className="h-10 w-auto" />
+                     <span className="font-bold text-xl text-white">Kadosh AI</span>
+                 </div>
+                 <span className="text-sm font-medium text-zinc-400">Social Deal Maker</span>
              </div>
         </div>
         <nav className="flex-1 p-4 space-y-2">
@@ -123,8 +126,8 @@ export default function LandingPage() {
       {/* Mobile Header */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-zinc-950/80 backdrop-blur-xl border-b border-white/5 z-50 flex items-center justify-between px-6">
           <div className="flex items-center gap-2">
-             <img src="/kadoshAI-removebg.png" alt="KadoshAI Logo" className="h-8 w-auto" />
-             <span className="font-bold text-lg tracking-tight">Social Deal Maker</span>
+             <img src="/KadoshAI_Logo.png" alt="KadoshAI Logo" className="h-8 w-auto" />
+             <span className="font-bold text-lg tracking-tight text-white">Social Deal Maker</span>
           </div>
           <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-zinc-400">
               {isMobileMenuOpen ? <X /> : <Menu />}
