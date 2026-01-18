@@ -25,7 +25,7 @@ serve(async (req) => {
     }
 
     const fbAccessToken =
-      Deno.env.get("MESSENGER_ACCESS_TOKEN") || Deno.env.get("FB_ACCESS_TOKEN");
+      Deno.env.get("MESSENGER_ACCESS_TOKEN") || Deno.env.get("FACEBOOK_ACCESS_TOKEN");
     if (!fbAccessToken) {
       throw new Error("Missing MESSENGER_ACCESS_TOKEN");
     }

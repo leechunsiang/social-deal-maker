@@ -28,11 +28,11 @@ serve(async (req) => {
 
     // Get Facebook access token
     const fbAccessToken =
-      Deno.env.get("FB_ACCESS_TOKEN") || Deno.env.get("FACEBOOK_ACCESS_TOKEN");
+      Deno.env.get("FACEBOOK_ACCESS_TOKEN") || Deno.env.get("FB_ACCESS_TOKEN");
 
     if (!fbAccessToken) {
       throw new Error(
-        "Missing Facebook credentials (FB_ACCESS_TOKEN/FACEBOOK_ACCESS_TOKEN)."
+        "Missing Facebook credentials (FACEBOOK_ACCESS_TOKEN)."
       );
     }
 

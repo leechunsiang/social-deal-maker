@@ -26,12 +26,12 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const fbAccessToken =
-      Deno.env.get("FB_ACCESS_TOKEN") || Deno.env.get("FACEBOOK_ACCESS_TOKEN");
+      Deno.env.get("FACEBOOK_ACCESS_TOKEN") || Deno.env.get("FB_ACCESS_TOKEN");
     const pageId = Deno.env.get("FB_PAGE_ID");
 
     if (!fbAccessToken || !pageId) {
       throw new Error(
-        "Missing Facebook credentials. Please set FB_ACCESS_TOKEN and FB_PAGE_ID in your Supabase Edge Function secrets."
+        "Missing Facebook credentials. Please set FACEBOOK_ACCESS_TOKEN and FB_PAGE_ID in your Supabase Edge Function secrets."
       );
     }
 

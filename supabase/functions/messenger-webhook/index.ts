@@ -186,8 +186,8 @@ async function ensureLeadExists(psid: string, supabase: any) {
   // Fallback to MESSENGER_ACCESS_TOKEN if not set (legacy behavior)
   const fbAccessToken =
     Deno.env.get("FACEBOOK_ACCESS_TOKEN") ||
-    Deno.env.get("FB_ACCESS_TOKEN") ||
-    Deno.env.get("MESSENGER_ACCESS_TOKEN");
+    Deno.env.get("MESSENGER_ACCESS_TOKEN") ||
+    Deno.env.get("FB_ACCESS_TOKEN");
 
   let firstName = "Unknown";
   let lastName = "User";
