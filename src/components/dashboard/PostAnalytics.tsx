@@ -174,7 +174,7 @@ export function PostAnalytics({ postId, platform, platformPostId, autoFetch = tr
                             <Share2 className="w-4 h-4 text-green-400 flex-shrink-0" />
                             <div className="min-w-0">
                                 <p className="text-xs text-zinc-500">Shares</p>
-                                <p className="text-sm font-bold text-white">{analytics.shares_count.toLocaleString()}</p>
+                                <p className="text-sm font-bold text-white">{(analytics.shares_count ?? 0).toLocaleString()}</p>
                             </div>
                         </div>
                     )}
@@ -185,7 +185,7 @@ export function PostAnalytics({ postId, platform, platformPostId, autoFetch = tr
                             <Bookmark className="w-4 h-4 text-amber-400 flex-shrink-0" />
                             <div className="min-w-0">
                                 <p className="text-xs text-zinc-500">Saved</p>
-                                <p className="text-sm font-bold text-white">{analytics.saved_count.toLocaleString()}</p>
+                                <p className="text-sm font-bold text-white">{(analytics.saved_count ?? 0).toLocaleString()}</p>
                             </div>
                         </div>
                     )}

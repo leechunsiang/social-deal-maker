@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Upload, FileText, Image as ImageIcon, Loader2, Copy, CheckCircle2, Sparkles, ChevronDown, ChevronRight, Trash2, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -97,7 +97,6 @@ export function RepurposeTab() {
   const [copied, setCopied] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [history, setHistory] = useState<RepurposedItem[]>([]);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [expandedHistoryId, setExpandedHistoryId] = useState<string | null>(null);
 
   // Fetch generated images and history on mount
@@ -148,7 +147,6 @@ export function RepurposeTab() {
 
   const fetchHistory = async () => {
     try {
-      setIsLoadingHistory(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
@@ -164,8 +162,6 @@ export function RepurposeTab() {
       setHistory(data || []);
     } catch (err) {
       console.error('Error fetching history:', err);
-    } finally {
-      setIsLoadingHistory(false);
     }
   };
 

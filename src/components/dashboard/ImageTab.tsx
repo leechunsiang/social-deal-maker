@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '../../lib/supabase';
@@ -15,12 +15,11 @@ export function ImageTab() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [savedGenerations, setSavedGenerations] = useState<any[]>([]);
+
   const [expandedPromptId, setExpandedPromptId] = useState<string | null>(null);
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   const fetchSavedImages = async () => {
     try {
-      setIsLoadingHistory(true);
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
@@ -51,13 +50,11 @@ export function ImageTab() {
       setSavedGenerations(generationsWithUrls);
     } catch (err) {
       console.error('Error fetching saved images:', err);
-    } finally {
-      setIsLoadingHistory(false);
     }
   };
 
   // Fetch saved images on mount
-  React.useEffect(() => {
+  useEffect(() => {
     fetchSavedImages();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

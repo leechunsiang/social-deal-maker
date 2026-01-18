@@ -1,7 +1,7 @@
 
 import { supabase } from '../../lib/supabase';
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight, Plus, Facebook, Instagram, Linkedin, Twitter, Clock } from 'lucide-react';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, startOfWeek, endOfWeek, addWeeks, subWeeks, addDays, subDays } from 'date-fns';
@@ -126,10 +126,7 @@ export default function ScheduleTab() {
       fetchPosts(); 
   };
 
-  const handleAddEventFromDetails = () => {
-      setIsDetailsOpen(false);
-      setIsDialogOpen(true);
-  };
+
 
   return (
     <div className="flex flex-col h-full bg-black/20 rounded-2xl border border-white/5 overflow-hidden">
@@ -224,7 +221,6 @@ export default function ScheduleTab() {
               <DayGrid 
                   date={date}
                   posts={posts}
-                  onEdit={() => {}}
               />
           )}
       </div>
@@ -407,7 +403,7 @@ function WeekGrid({ date, selectedDate, onSelectDate, onDoubleClickDate, posts }
     );
 }
 
-function DayGrid({ date, posts, onEdit }: { date: Date | undefined; posts: ScheduledPost[]; onEdit: (post: ScheduledPost) => void }) {
+function DayGrid({ date, posts }: { date: Date | undefined; posts: ScheduledPost[]; }) {
     if (!date) return null;
     
     // Sort posts by time

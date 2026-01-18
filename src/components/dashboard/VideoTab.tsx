@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Upload, FileVideo, Play, FileText, Loader2, CheckCircle, AlertCircle, Trash2 } from 'lucide-react';
+import { Upload, FileVideo, FileText, Loader2, CheckCircle, AlertCircle, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { cn } from '../../lib/utils';
 

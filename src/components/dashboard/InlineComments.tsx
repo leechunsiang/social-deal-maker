@@ -33,7 +33,7 @@ interface InlineCommentsProps {
     autoFetch?: boolean;
 }
 
-export function InlineComments({ postId, fbPostId, igPostId, platform, autoFetch = true }: InlineCommentsProps) {
+export function InlineComments({ postId, fbPostId, platform, autoFetch = true }: InlineCommentsProps) {
     const [comments, setComments] = useState<Comment[]>([]);
     const [replies, setReplies] = useState<Record<string, CommentReply[]>>({});
     const [loading, setLoading] = useState(true);
