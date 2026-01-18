@@ -1,4 +1,5 @@
-import React, { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
+import type { RefObject } from 'react';
 import { Bell, MessageSquare, AlertCircle, CheckCircle2, MessageCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../../lib/utils';
@@ -6,7 +7,7 @@ import { useNotifications } from '../../lib/hooks/useNotifications';
 // Local hook implementation below
 
 // Simple click outside hook implementation if not exists
-function useClickOutside<T extends HTMLElement>(ref: React.RefObject<T>, handler: (event: Event) => void) {
+function useClickOutside<T extends HTMLElement>(ref: RefObject<T | null>, handler: (event: Event) => void) {
   useEffect(() => {
     const listener = (event: any) => {
       if (!ref.current || ref.current.contains(event.target as Node)) {
