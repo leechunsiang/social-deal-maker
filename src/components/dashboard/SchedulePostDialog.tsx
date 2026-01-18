@@ -250,17 +250,31 @@ export function SchedulePostDialog({ isOpen, onClose, selectedDate }: SchedulePo
              };
 
              console.log(`Invoking ${targetFunction} for post ${id} with payload:`, payload);
-             const { data, error: funcError } = await supabase.functions.invoke(targetFunction, {
-                body: payload
-             });
 
-             if (funcError || data?.error) {
-                 console.error(`Failed to publish to ${platform}:`, funcError || data?.error);
-                 const errorMessage = funcError?.message || data?.error || 'Unknown error';
-                 alert(`Failed to publish to ${platform}. Error: ${errorMessage}`);
-             } else {
-                 console.log(`Successfully published to ${platform}`);
-                 alert(`Successfully published to ${platform}!`);
+             try {
+                 const { data, error: funcError } = await supabase.functions.invoke(targetFunction, {
+                    body: payload
+                 });
+
+                 console.log(`${targetFunction} response:`, { data, funcError });
+
+                 if (funcError) {
+                     console.error(`Function invocation error for ${platform}:`, funcError);
+                     const errorMessage = funcError?.message || JSON.stringify(funcError);
+                     alert(`Failed to publish to ${platform}. Network or function error: ${errorMessage}`);
+                 } else if (data?.error) {
+                     console.error(`API error from ${platform}:`, data.error);
+                     alert(`Failed to publish to ${platform}. API error: ${data.error}`);
+                 } else if (data?.success) {
+                     console.log(`Successfully published to ${platform}. Post ID: ${data.id}`);
+                     alert(`Successfully published to ${platform}!`);
+                 } else {
+                     console.warn(`Unexpected response from ${platform}:`, data);
+                     alert(`Published to ${platform}, but received unexpected response. Check console for details.`);
+                 }
+             } catch (publishError) {
+                 console.error(`Exception while publishing to ${platform}:`, publishError);
+                 alert(`Failed to publish to ${platform}. Exception: ${publishError instanceof Error ? publishError.message : 'Unknown error'}`);
              }
           }
       }
