@@ -1,15 +1,18 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response(null, {
+      status: 200,
+      headers: corsHeaders
+    });
   }
 
   try {
@@ -25,7 +28,7 @@ serve(async (req) => {
     const igId = Deno.env.get("IG_ID") || Deno.env.get("VITE_IG_ID");
 
     if (!igAccessToken || !igId) {
-      throw new Error("Missing Instagram credentials.");
+      throw new Error("Missing Instagram credentials. Please set IG_ACCESS_TOKEN and IG_ID in your Supabase Edge Function secrets.");
     }
 
     // Normalize media to array

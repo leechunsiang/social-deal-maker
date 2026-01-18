@@ -1,15 +1,18 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response(null, {
+      status: 200,
+      headers: corsHeaders
+    });
   }
 
   try {
@@ -28,7 +31,7 @@ serve(async (req) => {
 
     if (!fbAccessToken || !pageId) {
       throw new Error(
-        "Missing Facebook credentials (FB_ACCESS_TOKEN/FACEBOOK_ACCESS_TOKEN or FB_PAGE_ID)."
+        "Missing Facebook credentials. Please set FB_ACCESS_TOKEN and FB_PAGE_ID in your Supabase Edge Function secrets."
       );
     }
 
